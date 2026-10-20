@@ -19,6 +19,24 @@ docs/   Projektdokumentation (Prozess, Architektur, Entscheidungen)
 
 ## Entwicklung
 
+Python 3, nur Standardbibliothek – Entscheidung siehe
+[docs/adr-001-tech-stack.md](docs/adr-001-tech-stack.md).
+
+```bash
+# Tests
+python3 -m unittest discover -s tests
+
+# CLI (aus dem Repo-Root, PYTHONPATH auf src/)
+PYTHONPATH=src python3 -m pp.cli project add p1 "Meine Projekt"
+PYTHONPATH=src python3 -m pp.cli item add p1 i1 "Erster Eintrag" --priority hoch
+PYTHONPATH=src python3 -m pp.cli item move p1 i1 in_arbeit
+PYTHONPATH=src python3 -m pp.cli board p1
+```
+
+Daten liegen standardmäßig in `projects.json` (`--db` zum Überschreiben).
+
+## Agiler Prozess
+
 Das Projekt wird in Sprints entwickelt:
 
 1. Backlog pflegen (`docs/backlog.md`)

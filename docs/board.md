@@ -14,5 +14,7 @@ Ziel: Ein dokumentiertes, lauffähiges Projektgerüst.
 
 Ziel: Konzeption der Projekt- und Backlog-Verwaltung.
 
-- [ ] Datenmodell für Projekte und Einträge entwerfen
-- [ ] Tech-Stack festlegen
+- [x] Datenmodell für Projekte und Einträge entwerfen
+- [x] Tech-Stack festlegen (ADR: `adr-001-tech-stack.md`)
+- [x] CLI mit project/item/board implementieren
+- [x] Tests für Modell und Speicher
