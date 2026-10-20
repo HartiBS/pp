@@ -5,35 +5,102 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>pp – Agile Projekte</title>
 <style>
-  :root { --bg:#f4f5f7; --card:#fff; --accent:#2c5cc5; --text:#172b4d; --muted:#6b778c; }
-  * { box-sizing: border-box; }
+  :root { --bg:#f4f5f7; --card:#fff; --accent:#2c5cc5; --text:#172b4d; --muted:#6b778c; --danger:#de350b; }
+  * { box-sizing:border-box; }
   body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
-  header { background:var(--accent); color:#fff; padding:16px 24px; }
-  header h1 { margin:0; font-size:1.2rem; }
-  select { margin-left:16px; padding:4px 8px; border-radius:4px; border:none; }
+  header { background:var(--accent); color:#fff; padding:12px 24px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:1.1rem; }
+  header select, header input, header button { padding:6px 10px; border:none; border-radius:4px; font-size:.9rem; }
+  header button { background:#fff; color:var(--accent); font-weight:600; cursor:pointer; }
+  dialog { border:none; border-radius:8px; box-shadow:0 8px 30px rgba(9,30,66,.25); padding:24px; width:min(420px,90vw); }
+  dialog::backdrop { background:rgba(9,30,66,.5); }
+  dialog h2 { margin:0 0 16px; font-size:1.05rem; }
+  dialog label { display:block; font-size:.85rem; color:var(--muted); margin:12px 0 4px; }
+  dialog input, dialog select { width:100%; padding:8px; border:1px solid #d1d5da; border-radius:4px; font-size:.95rem; }
+  dialog .row { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
+  dialog button { padding:8px 16px; border:none; border-radius:4px; cursor:pointer; font-size:.9rem; }
+  dialog .primary { background:var(--accent); color:#fff; }
+  dialog .cancel { background:#ebecf0; }
+  .error { color:var(--danger); font-size:.85rem; margin-top:10px; min-height:1em; }
   main { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; padding:24px; }
   .column { background:#ebecf0; border-radius:8px; padding:8px; min-height:200px; }
   .column h2 { font-size:.85rem; text-transform:uppercase; color:var(--muted);
                margin:4px 8px 12px; display:flex; justify-content:space-between; }
   .card { background:var(--card); border-radius:6px; box-shadow:0 1px 2px rgba(9,30,66,.2);
-          padding:10px; margin-bottom:8px; cursor:grab; }
+          padding:10px; margin-bottom:8px; cursor:grab; position:relative; }
   .card.dragging { opacity:.5; }
-  .card .title { font-size:.9rem; }
+  .card .title { font-size:.9rem; padding-right:22px; }
   .card .meta { font-size:.75rem; color:var(--muted); margin-top:6px;
                 display:flex; gap:8px; justify-content:space-between; }
+  .card .del { position:absolute; top:6px; right:8px; border:none; background:none; color:var(--muted);
+               cursor:pointer; font-size:1rem; line-height:1; padding:2px 4px; border-radius:4px; }
+  .card .del:hover { color:var(--danger); background:#ffebe6; }
   .prio-hoch { color:#de350b; font-weight:600; }
   .prio-mittel { color:#ff991f; font-weight:600; }
   .prio-niedrig { color:#36b37e; font-weight:600; }
   #empty { padding:40px; text-align:center; color:var(--muted); }
+  @media (max-width: 900px) { main { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width: 550px) { main { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
 <header>
   <h1>pp – Agile Projekte</h1>
-  <label>Projekt: <select id="projectSelect"><option value="">– laden –</option></select></label>
+  <select id="projectSelect" aria-label="Projekt wählen"></select>
+  <button id="newProjectBtn">+ Projekt</button>
+  <button id="newItemBtn">+ Eintrag</button>
 </header>
 <div id="empty">Lade Projekte …</div>
 <main id="board" hidden></main>
+
+<dialog id="projectDialog">
+  <form method="dialog" id="projectForm">
+    <h2>Neues Projekt</h2>
+    <label for="pId">Kürzel (ID)</label>
+    <input id="pId" name="id" required pattern="[\\w-]+" placeholder="z. B. web-2024">
+    <label for="pName">Name</label>
+    <input id="pName" name="name" required placeholder="z. B. Website Relaunch">
+    <label for="pDesc">Beschreibung (optional)</label>
+    <input id="pDesc" name="description" placeholder="Kurzbeschreibung">
+    <div class="error" id="projectError"></div>
+    <div class="row">
+      <button value="cancel" class="cancel" formnovalidate>Abbrechen</button>
+      <button value="submit" class="primary">Anlegen</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="itemDialog">
+  <form method="dialog" id="itemForm">
+    <h2>Neuer Backlog-Eintrag</h2>
+    <label for="iId">Kürzel (ID)</label>
+    <input id="iId" name="id" required pattern="[\\w-]+" placeholder="z. B. i-001">
+    <label for="iTitle">Titel</label>
+    <input id="iTitle" name="title" required placeholder="Was ist zu tun?">
+    <label for="iPrio">Priorität</label>
+    <select id="iPrio" name="priority">
+      <option value="hoch">Hoch</option>
+      <option value="mittel" selected>Mittel</option>
+      <option value="niedrig">Niedrig</option>
+    </select>
+    <div class="error" id="itemError"></div>
+    <div class="row">
+      <button value="cancel" class="cancel" formnovalidate>Abbrechen</button>
+      <button value="submit" class="primary">Hinzufügen</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirmDialog">
+  <form method="dialog" id="confirmForm">
+    <h2>Eintrag löschen?</h2>
+    <p id="confirmText" style="font-size:.9rem;color:var(--muted)"></p>
+    <div class="row">
+      <button value="cancel" class="cancel">Abbrechen</button>
+      <button value="submit" class="primary" style="background:var(--danger)">Löschen</button>
+    </div>
+  </form>
+</dialog>
 
 <script>
 "use strict";
@@ -48,15 +115,29 @@ const PRIO_LABEL = { hoch: "Hoch", mittel: "Mittel", niedrig: "Niedrig" };
 
 let projects = [];
 let projectId = null;
+let pendingDelete = null;
 
 const $ = (sel) => document.querySelector(sel);
 
+async function api(path, payload) {
+  const options = payload === undefined
+    ? {}
+    : { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload) };
+  const response = await fetch(path, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  return data;
+}
+
 async function loadProjects() {
-  projects = await (await fetch("/api/projects")).json();
+  projects = await api("/api/projects");
   const select = $("#projectSelect");
   select.innerHTML = "";
   if (projects.length === 0) {
-    $("#empty").textContent = "Keine Projekte vorhanden – mit der CLI anlegen.";
+    $("#empty").textContent = "Noch kein Projekt – lege eines über \"+ Projekt\" an.";
+    $("#empty").hidden = false;
+    $("#board").hidden = true;
     return;
   }
   for (const p of projects) {
@@ -65,7 +146,8 @@ async function loadProjects() {
     opt.textContent = `${p.name} (${p.id})`;
     select.append(opt);
   }
-  projectId = projects[0].id;
+  if (!projects.some((p) => p.id === projectId)) projectId = projects[0].id;
+  select.value = projectId;
   render();
 }
 
@@ -78,10 +160,11 @@ function render() {
   for (const status of STATUSES) {
     const column = document.createElement("section");
     column.className = "column";
-    column.dataset.status = status.key;
     const items = project.items.filter((i) => i.status === status.key);
     const h2 = document.createElement("h2");
-    h2.innerHTML = `<span>${status.label}</span><span>${items.length}</span>`;
+    h2.innerHTML = `<span></span><span></span>`;
+    h2.firstChild.textContent = status.label;
+    h2.lastChild.textContent = items.length;
     column.append(h2);
     for (const item of items) column.append(renderCard(item));
     column.addEventListener("dragover", (e) => e.preventDefault());
@@ -94,12 +177,23 @@ function renderCard(item) {
   const card = document.createElement("article");
   card.className = "card";
   card.draggable = true;
-  card.innerHTML = `
-    <div class="title"></div>
-    <div class="meta"><span></span><span class="prio prio-${item.priority}"></span></div>`;
-  card.querySelector(".title").textContent = item.title;
-  card.querySelector(".meta span").textContent = item.id;
-  card.querySelector(".prio").textContent = PRIO_LABEL[item.priority];
+  const del = document.createElement("button");
+  del.className = "del";
+  del.textContent = "×";
+  del.title = "Eintrag löschen";
+  del.addEventListener("click", (e) => { e.stopPropagation(); confirmDelete(item); });
+  const title = document.createElement("div");
+  title.className = "title";
+  title.textContent = item.title;
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  const idSpan = document.createElement("span");
+  idSpan.textContent = item.id;
+  const prioSpan = document.createElement("span");
+  prioSpan.className = `prio prio-${item.priority}`;
+  prioSpan.textContent = PRIO_LABEL[item.priority];
+  meta.append(idSpan, prioSpan);
+  card.append(del, title, meta);
   card.addEventListener("dragstart", () => {
     card.classList.add("dragging");
     card.dataset.itemId = item.id;
@@ -112,13 +206,80 @@ async function onDrop(event, status) {
   event.preventDefault();
   const card = document.querySelector(".card.dragging");
   if (!card) return;
-  const response = await fetch("/api/move", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: projectId, item_id: card.dataset.itemId, status }),
-  });
-  if (response.ok) await loadProjects();
+  try {
+    await api("/api/move", { project_id: projectId, item_id: card.dataset.itemId, status });
+    await loadProjects();
+  } catch (err) {
+    alert(err.message);
+  }
 }
+
+function confirmDelete(item) {
+  pendingDelete = item;
+  $("#confirmText").textContent = `"${item.title}" (${item.id}) endgültig löschen?`;
+  if (!$("#confirmDialog").open) $("#confirmDialog").showModal();
+}
+
+$("#confirmForm").addEventListener("submit", async (e) => {
+  if (!pendingDelete || e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  try {
+    await api("/api/delete", { project_id: projectId, item_id: pendingDelete.id });
+    pendingDelete = null;
+    $("#confirmDialog").close();
+    await loadProjects();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$("#newProjectBtn").addEventListener("click", () => {
+  $("#projectForm").reset();
+  $("#projectError").textContent = "";
+  $("#projectDialog").showModal();
+});
+
+$("#projectForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  const payload = {
+    id: $("#pId").value.trim(),
+    name: $("#pName").value.trim(),
+    description: $("#pDesc").value.trim(),
+  };
+  try {
+    const project = await api("/api/projects", payload);
+    projectId = project.id;
+    $("#projectDialog").close();
+    await loadProjects();
+  } catch (err) {
+    $("#projectError").textContent = err.message;
+  }
+});
+
+$("#newItemBtn").addEventListener("click", () => {
+  if (!projectId) return;
+  $("#itemForm").reset();
+  $("#itemError").textContent = "";
+  $("#itemDialog").showModal();
+});
+
+$("#itemForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  try {
+    await api("/api/items", {
+      project_id: projectId,
+      id: $("#iId").value.trim(),
+      title: $("#iTitle").value.trim(),
+      priority: $("#iPrio").value,
+    });
+    $("#itemDialog").close();
+    await loadProjects();
+  } catch (err) {
+    $("#itemError").textContent = err.message;
+  }
+});
 
 $("#projectSelect").addEventListener("change", (e) => {
   projectId = e.target.value;

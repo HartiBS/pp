@@ -6,7 +6,7 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .model import STATUSES
+from .model import PRIORITIES, STATUSES, Item, Project
 from .store import Store
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -41,7 +41,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "nicht gefunden"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/api/move":
+        if self.path not in ("/api/projects", "/api/items", "/api/move", "/api/delete"):
             self._send_json({"error": "nicht gefunden"}, 404)
             return
         length = int(self.headers.get("Content-Length", 0))
@@ -50,18 +50,56 @@ class Handler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self._send_json({"error": "ungültiges JSON"}, 400)
             return
-
-        project = self.store.get_project(payload.get("project_id", ""))
-        if project is None:
-            self._send_json({"error": "Projekt nicht gefunden"}, 404)
-            return
         try:
-            item = project.move_item(payload.get("item_id", ""), payload.get("status", ""))
+            if self.path == "/api/projects":
+                self._add_project(payload)
+            elif self.path == "/api/items":
+                self._add_item(payload)
+            elif self.path == "/api/move":
+                self._move_item(payload)
+            else:
+                self._delete_item(payload)
         except (KeyError, ValueError) as exc:
             self._send_json({"error": str(exc)}, 400)
             return
         self.store.save()
+
+    def _project_or_fail(self, project_id: str) -> Project:
+        project = self.store.get_project(project_id)
+        if project is None:
+            raise KeyError(f"Projekt {project_id!r} nicht gefunden")
+        return project
+
+    def _add_project(self, payload: dict) -> None:
+        project = Project(
+            id=payload["id"], name=payload["name"], description=payload.get("description", "")
+        )
+        self.store.add_project(project)
+        self._send_json(project.to_dict(), 201)
+
+    def _add_item(self, payload: dict) -> None:
+        project = self._project_or_fail(payload["project_id"])
+        item = Item(
+            id=payload["id"],
+            project_id=project.id,
+            title=payload["title"],
+            priority=payload.get("priority", "mittel"),
+        )
+        project.add_item(item)
+        self._send_json(item.to_dict(), 201)
+
+    def _move_item(self, payload: dict) -> None:
+        project = self._project_or_fail(payload["project_id"])
+        item = project.move_item(payload["item_id"], payload["status"])
         self._send_json(item.to_dict())
+
+    def _delete_item(self, payload: dict) -> None:
+        project = self._project_or_fail(payload["project_id"])
+        item = project.find_item(payload["item_id"])
+        if item is None:
+            raise KeyError(f"Eintrag {payload['item_id']!r} nicht gefunden")
+        project.items.remove(item)
+        self._send_json({"deleted": item.id})
 
     def log_message(self, format: str, *args: object) -> None:
         pass
