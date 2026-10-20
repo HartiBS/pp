@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .model import Item, Project
+from .model import PRIORITIES, STATUSES, Item, Project
 from .store import Store
 
 DEFAULT_DB = Path("projects.json")
@@ -58,13 +58,34 @@ def cmd_item_move(args: argparse.Namespace, store: Store) -> None:
     print(f"Eintrag {item.id!r} -> {item.status}.")
 
 
+def cmd_item_list(args: argparse.Namespace, store: Store) -> None:
+    project = store.get_project(args.project)
+    if project is None:
+        sys.exit(f"Projekt {args.project!r} nicht gefunden.")
+    items = project.items
+    if args.status:
+        items = [i for i in items if i.status == args.status]
+    if args.priority:
+        items = [i for i in items if i.priority == args.priority]
+    if not items:
+        print("Keine Einträge gefunden.")
+        return
+    for item in items:
+        print(f"[{item.status:8}] [{item.priority:6}] {item.id}: {item.title}")
+
+
 def cmd_board(args: argparse.Namespace, store: Store) -> None:
     project = store.get_project(args.project)
     if project is None:
         sys.exit(f"Projekt {args.project!r} nicht gefunden.")
     print(f"Board: {project.name} ({project.id})")
-    for item in project.items:
-        print(f"  [{item.status:8}] [{item.priority:6}] {item.id}: {item.title}")
+    print()
+    for status in STATUSES:
+        items = [i for i in project.items if i.status == status]
+        print(f"=== {status} ({len(items)}) ===")
+        for item in items:
+            print(f"  [{item.priority:6}] {item.id}: {item.title}")
+        print()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -93,8 +114,13 @@ def build_parser() -> argparse.ArgumentParser:
     i_move = i_sub.add_parser("move", help="Eintrag in anderen Status verschieben")
     i_move.add_argument("project")
     i_move.add_argument("item")
-    i_move.add_argument("status", choices=("offen", "in_arbeit", "pruefung", "fertig"))
+    i_move.add_argument("status", choices=STATUSES)
     i_move.set_defaults(func=cmd_item_move)
+    i_list = i_sub.add_parser("list", help="Einträge auflisten (optional gefiltert)")
+    i_list.add_argument("project")
+    i_list.add_argument("--status", choices=STATUSES)
+    i_list.add_argument("--priority", choices=PRIORITIES)
+    i_list.set_defaults(func=cmd_item_list)
 
     p_board = sub.add_parser("board", help="Board eines Projekts anzeigen")
     p_board.add_argument("project")
