@@ -44,8 +44,6 @@ Drag & Drop ändern und Einträge löschen.
 
 ## Agiler Prozess
 
-## Agiler Prozess
-
 Das Projekt wird in Sprints entwickelt:
 
 1. Backlog pflegen (`docs/backlog.md`)
