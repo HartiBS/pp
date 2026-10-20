@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pp – Agile Projekte</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --accent:#2c5cc5; --text:#172b4d; --muted:#6b778c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+  header { background:var(--accent); color:#fff; padding:16px 24px; }
+  header h1 { margin:0; font-size:1.2rem; }
+  select { margin-left:16px; padding:4px 8px; border-radius:4px; border:none; }
+  main { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; padding:24px; }
+  .column { background:#ebecf0; border-radius:8px; padding:8px; min-height:200px; }
+  .column h2 { font-size:.85rem; text-transform:uppercase; color:var(--muted);
+               margin:4px 8px 12px; display:flex; justify-content:space-between; }
+  .card { background:var(--card); border-radius:6px; box-shadow:0 1px 2px rgba(9,30,66,.2);
+          padding:10px; margin-bottom:8px; cursor:grab; }
+  .card.dragging { opacity:.5; }
+  .card .title { font-size:.9rem; }
+  .card .meta { font-size:.75rem; color:var(--muted); margin-top:6px;
+                display:flex; gap:8px; justify-content:space-between; }
+  .prio-hoch { color:#de350b; font-weight:600; }
+  .prio-mittel { color:#ff991f; font-weight:600; }
+  .prio-niedrig { color:#36b37e; font-weight:600; }
+  #empty { padding:40px; text-align:center; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>pp – Agile Projekte</h1>
+  <label>Projekt: <select id="projectSelect"><option value="">– laden –</option></select></label>
+</header>
+<div id="empty">Lade Projekte …</div>
+<main id="board" hidden></main>
+
+<script>
+"use strict";
+
+const STATUSES = [
+  { key: "offen",     label: "Offen" },
+  { key: "in_arbeit", label: "In Arbeit" },
+  { key: "pruefung",  label: "Prüfung" },
+  { key: "fertig",    label: "Fertig" },
+];
+const PRIO_LABEL = { hoch: "Hoch", mittel: "Mittel", niedrig: "Niedrig" };
+
+let projects = [];
+let projectId = null;
+
+const $ = (sel) => document.querySelector(sel);
+
+async function loadProjects() {
+  projects = await (await fetch("/api/projects")).json();
+  const select = $("#projectSelect");
+  select.innerHTML = "";
+  if (projects.length === 0) {
+    $("#empty").textContent = "Keine Projekte vorhanden – mit der CLI anlegen.";
+    return;
+  }
+  for (const p of projects) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = `${p.name} (${p.id})`;
+    select.append(opt);
+  }
+  projectId = projects[0].id;
+  render();
+}
+
+function render() {
+  const project = projects.find((p) => p.id === projectId);
+  const board = $("#board");
+  board.innerHTML = "";
+  $("#empty").hidden = true;
+  board.hidden = false;
+  for (const status of STATUSES) {
+    const column = document.createElement("section");
+    column.className = "column";
+    column.dataset.status = status.key;
+    const items = project.items.filter((i) => i.status === status.key);
+    const h2 = document.createElement("h2");
+    h2.innerHTML = `<span>${status.label}</span><span>${items.length}</span>`;
+    column.append(h2);
+    for (const item of items) column.append(renderCard(item));
+    column.addEventListener("dragover", (e) => e.preventDefault());
+    column.addEventListener("drop", (e) => onDrop(e, status.key));
+    board.append(column);
+  }
+}
+
+function renderCard(item) {
+  const card = document.createElement("article");
+  card.className = "card";
+  card.draggable = true;
+  card.innerHTML = `
+    <div class="title"></div>
+    <div class="meta"><span></span><span class="prio prio-${item.priority}"></span></div>`;
+  card.querySelector(".title").textContent = item.title;
+  card.querySelector(".meta span").textContent = item.id;
+  card.querySelector(".prio").textContent = PRIO_LABEL[item.priority];
+  card.addEventListener("dragstart", () => {
+    card.classList.add("dragging");
+    card.dataset.itemId = item.id;
+  });
+  card.addEventListener("dragend", () => card.classList.remove("dragging"));
+  return card;
+}
+
+async function onDrop(event, status) {
+  event.preventDefault();
+  const card = document.querySelector(".card.dragging");
+  if (!card) return;
+  const response = await fetch("/api/move", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: projectId, item_id: card.dataset.itemId, status }),
+  });
+  if (response.ok) await loadProjects();
+}
+
+$("#projectSelect").addEventListener("change", (e) => {
+  projectId = e.target.value;
+  render();
+});
+
+loadProjects();
+</script>
+</body>
+</html>

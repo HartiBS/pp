@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .model import PRIORITIES, STATUSES, Item, Project
 from .store import Store
-
+from .web import serve
 DEFAULT_DB = Path("projects.json")
 
 
@@ -126,7 +126,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_board.add_argument("project")
     p_board.set_defaults(func=cmd_board)
 
+    p_serve = sub.add_parser("serve", help="HTML5-Board im Browser starten")
+    p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8000)
+    p_serve.set_defaults(func=cmd_serve)
+
     return parser
+
+
+def cmd_serve(args: argparse.Namespace, store: Store) -> None:
+    serve(args.host, args.port, store.path)
 
 
 def main(argv: list[str] | None = None) -> int:
