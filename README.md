@@ -42,6 +42,25 @@ Die Webapp unter `serve` unterstützt die komplette Verwaltung im Browser:
 Projekte anlegen, Backlog-Einträge mit Priorität anlegen, Status per
 Drag & Drop ändern und Einträge löschen.
 
+## GitLab-Sync
+
+Jedes pp-Projekt wird als eigenes GitLab-Repository in einer Gruppe
+synchronisiert, jeder Backlog-Eintrag als Issue (Work Item) darin:
+
+```bash
+export GITLAB_URL=https://gitlab.example.com   # optional, Default gitlab.com
+export GITLAB_GROUP=meine-agile-gruppe          # Namespace für die Projekt-Repos
+export GITLAB_TOKEN=<personal access token>     # scope: api
+
+PYTHONPATH=src python3 -m pp.cli sync          # alle Projekte
+PYTHONPATH=src python3 -m pp.cli sync p1        # nur Projekt p1
+```
+
+Mapping: Repo-Name = Projekt-ID, Issue-Titel = `[<item-id>] <Titel>`,
+Status als Label (`status:offen` … `status:fertig`), Priorität als Label
+(`prio:hoch` …). Einträge mit Status `fertig` schließen das Issue.
+Der Sync ist idempotent – mehrfaches Ausführen erzeugt keine Dubletten.
+
 ## Agiler Prozess
 
 Das Projekt wird in Sprints entwickelt:

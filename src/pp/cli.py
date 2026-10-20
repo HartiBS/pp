@@ -9,6 +9,7 @@ from pathlib import Path
 from .model import PRIORITIES, STATUSES, Item, Project
 from .store import Store
 from .web import serve
+from .gitlab_sync import client_from_env, sync_project
 DEFAULT_DB = Path("projects.json")
 
 
@@ -131,11 +132,34 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--port", type=int, default=8000)
     p_serve.set_defaults(func=cmd_serve)
 
+    p_sync = sub.add_parser("sync", help="Projekte zu GitLab synchronisieren (Repo je Projekt, Issue je Eintrag)")
+    p_sync.add_argument("project", nargs="?", help="Optional: nur dieses Projekt")
+    p_sync.set_defaults(func=cmd_sync)
+
     return parser
 
 
 def cmd_serve(args: argparse.Namespace, store: Store) -> None:
     serve(args.host, args.port, store.path)
+
+
+def cmd_sync(args: argparse.Namespace, store: Store) -> None:
+    if args.project:
+        projects = [store.get_project(args.project)]
+        if projects[0] is None:
+            sys.exit(f"Projekt {args.project!r} nicht gefunden.")
+    else:
+        projects = store.list_projects()
+        if not projects:
+            print("Keine Projekte zum Synchronisieren.")
+            return
+    client = client_from_env()
+    for project in projects:
+        result = sync_project(client, project)
+        print(
+            f"{result['project']}: Repo {result['repo']} "
+            f"({result['created']} neu, {result['updated']} aktualisiert)"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
