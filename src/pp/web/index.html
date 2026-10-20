@@ -35,6 +35,9 @@
   .card .del { position:absolute; top:6px; right:8px; border:none; background:none; color:var(--muted);
                cursor:pointer; font-size:1rem; line-height:1; padding:2px 4px; border-radius:4px; }
   .card .del:hover { color:var(--danger); background:#ffebe6; }
+  .card .edit { position:absolute; top:4px; right:34px; border:none; background:none; color:var(--muted);
+                cursor:pointer; font-size:.8rem; line-height:1; padding:3px 4px; border-radius:4px; }
+  .card .edit:hover { color:var(--accent); background:#e6ecff; }
   .prio-hoch { color:#de350b; font-weight:600; }
   .prio-mittel { color:#ff991f; font-weight:600; }
   .prio-niedrig { color:#36b37e; font-weight:600; }
@@ -91,6 +94,34 @@
   </form>
 </dialog>
 
+<dialog id="editDialog">
+  <form method="dialog" id="editForm">
+    <h2>Eintrag bearbeiten</h2>
+    <label for="eId">Kürzel (ID)</label>
+    <input id="eId" disabled>
+    <label for="eTitle">Titel</label>
+    <input id="eTitle" name="title" required>
+    <label for="ePrio">Priorität</label>
+    <select id="ePrio" name="priority">
+      <option value="hoch">Hoch</option>
+      <option value="mittel">Mittel</option>
+      <option value="niedrig">Niedrig</option>
+    </select>
+    <label for="eStatus">Status</label>
+    <select id="eStatus" name="status">
+      <option value="offen">Offen</option>
+      <option value="in_arbeit">In Arbeit</option>
+      <option value="pruefung">Prüfung</option>
+      <option value="fertig">Fertig</option>
+    </select>
+    <div class="error" id="editError"></div>
+    <div class="row">
+      <button value="cancel" class="cancel" formnovalidate>Abbrechen</button>
+      <button value="submit" class="primary">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="confirmDialog">
   <form method="dialog" id="confirmForm">
     <h2>Eintrag löschen?</h2>
@@ -116,6 +147,7 @@ const PRIO_LABEL = { hoch: "Hoch", mittel: "Mittel", niedrig: "Niedrig" };
 let projects = [];
 let projectId = null;
 let pendingDelete = null;
+let pendingEdit = null;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -177,6 +209,11 @@ function renderCard(item) {
   const card = document.createElement("article");
   card.className = "card";
   card.draggable = true;
+  const edit = document.createElement("button");
+  edit.className = "edit";
+  edit.textContent = "✎";
+  edit.title = "Eintrag bearbeiten";
+  edit.addEventListener("click", (e) => { e.stopPropagation(); openEdit(item); });
   const del = document.createElement("button");
   del.className = "del";
   del.textContent = "×";
@@ -193,7 +230,7 @@ function renderCard(item) {
   prioSpan.className = `prio prio-${item.priority}`;
   prioSpan.textContent = PRIO_LABEL[item.priority];
   meta.append(idSpan, prioSpan);
-  card.append(del, title, meta);
+  card.append(edit, del, title, meta);
   card.addEventListener("dragstart", () => {
     card.classList.add("dragging");
     card.dataset.itemId = item.id;
@@ -213,6 +250,38 @@ async function onDrop(event, status) {
     alert(err.message);
   }
 }
+
+function openEdit(item) {
+  pendingEdit = item;
+  $("#eId").value = item.id;
+  $("#eTitle").value = item.title;
+  $("#ePrio").value = item.priority;
+  $("#eStatus").value = item.status;
+  $("#editError").textContent = "";
+  if (!$("#editDialog").open) $("#editDialog").showModal();
+}
+
+$("#editForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  try {
+    await api("/api/update", {
+      project_id: projectId,
+      item_id: pendingEdit.id,
+      title: $("#eTitle").value.trim(),
+      priority: $("#ePrio").value,
+    });
+    const newStatus = $("#eStatus").value;
+    if (newStatus !== pendingEdit.status) {
+      await api("/api/move", { project_id: projectId, item_id: pendingEdit.id, status: newStatus });
+    }
+    pendingEdit = null;
+    $("#editDialog").close();
+    await loadProjects();
+  } catch (err) {
+    $("#editError").textContent = err.message;
+  }
+});
 
 function confirmDelete(item) {
   pendingDelete = item;

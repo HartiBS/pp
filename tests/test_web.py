@@ -94,7 +94,18 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("error", data)
 
-    def test_08_delete_item(self) -> None:
+    def test_08a_update_item(self) -> None:
+        status, item = request("/api/update", {"project_id": "p1", "item_id": "i1", "title": "A2", "priority": "niedrig"})
+        self.assertEqual(status, 200)
+        self.assertEqual(item["title"], "A2")
+        self.assertEqual(item["priority"], "niedrig")
+
+    def test_08b_update_empty_title_fails(self) -> None:
+        status, data = request("/api/update", {"project_id": "p1", "item_id": "i1", "title": "  "})
+        self.assertEqual(status, 400)
+        self.assertIn("error", data)
+
+    def test_08c_delete_item(self) -> None:
         status, data = request("/api/delete", {"project_id": "p1", "item_id": "i1"})
         self.assertEqual(status, 200)
         self.assertEqual(data, {"deleted": "i1"})

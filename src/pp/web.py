@@ -41,7 +41,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "nicht gefunden"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path not in ("/api/projects", "/api/items", "/api/move", "/api/delete"):
+        if self.path not in ("/api/projects", "/api/items", "/api/move", "/api/update", "/api/delete"):
             self._send_json({"error": "nicht gefunden"}, 404)
             return
         length = int(self.headers.get("Content-Length", 0))
@@ -57,6 +57,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._add_item(payload)
             elif self.path == "/api/move":
                 self._move_item(payload)
+            elif self.path == "/api/update":
+                self._update_item(payload)
             else:
                 self._delete_item(payload)
         except (KeyError, ValueError) as exc:
@@ -91,6 +93,20 @@ class Handler(BaseHTTPRequestHandler):
     def _move_item(self, payload: dict) -> None:
         project = self._project_or_fail(payload["project_id"])
         item = project.move_item(payload["item_id"], payload["status"])
+        self._send_json(item.to_dict())
+
+    def _update_item(self, payload: dict) -> None:
+        project = self._project_or_fail(payload["project_id"])
+        item = project.find_item(payload["item_id"])
+        if item is None:
+            raise KeyError(f"Eintrag {payload['item_id']!r} nicht gefunden")
+        if "title" in payload:
+            title = payload["title"].strip()
+            if not title:
+                raise ValueError("Titel darf nicht leer sein")
+            item.title = title
+        if "priority" in payload:
+            item.priority = payload["priority"]
         self._send_json(item.to_dict())
 
     def _delete_item(self, payload: dict) -> None:
