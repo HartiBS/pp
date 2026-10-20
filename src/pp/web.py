@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .model import PRIORITIES, STATUSES, Item, Project
+from .gitlab_sync import GitLabClient, GitLabError, sync_project
 from .store import Store
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -41,7 +42,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "nicht gefunden"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path not in ("/api/projects", "/api/items", "/api/move", "/api/update", "/api/delete"):
+        if self.path not in ("/api/projects", "/api/items", "/api/move", "/api/update", "/api/delete", "/api/sync"):
             self._send_json({"error": "nicht gefunden"}, 404)
             return
         length = int(self.headers.get("Content-Length", 0))
@@ -59,6 +60,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._move_item(payload)
             elif self.path == "/api/update":
                 self._update_item(payload)
+            elif self.path == "/api/sync":
+                self._sync(payload)
             else:
                 self._delete_item(payload)
         except (KeyError, ValueError) as exc:
@@ -108,6 +111,30 @@ class Handler(BaseHTTPRequestHandler):
         if "priority" in payload:
             item.priority = payload["priority"]
         self._send_json(item.to_dict())
+
+    def _sync(self, payload: dict) -> None:
+        url = payload.get("url") or "https://gitlab.com"
+        token = (payload.get("token") or "").strip()
+        group = (payload.get("group") or "").strip()
+        if not token or not group:
+            raise ValueError("GitLab-Gruppe und -Token sind erforderlich")
+        client = GitLabClient(url, token, group)
+        project_id = payload.get("project_id")
+        if project_id:
+            projects = [self._project_or_fail(project_id)]
+        else:
+            projects = self.store.list_projects()
+            if not projects:
+                self._send_json({"results": [], "error": "Keine Projekte vorhanden"})
+                return
+        results = []
+        try:
+            for project in projects:
+                results.append(sync_project(client, project))
+        except GitLabError as exc:
+            self._send_json({"error": str(exc), "results": results}, 400)
+            return
+        self._send_json({"results": results})
 
     def _delete_item(self, payload: dict) -> None:
         project = self._project_or_fail(payload["project_id"])

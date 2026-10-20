@@ -61,6 +61,11 @@ Status als Label (`status:offen` … `status:fertig`), Priorität als Label
 (`prio:hoch` …). Einträge mit Status `fertig` schließen das Issue.
 Der Sync ist idempotent – mehrfaches Ausführen erzeugt keine Dubletten.
 
+Alternativ direkt im Browser (Button **↻ Sync** in der Kopfzeile): Die
+GitLab-Zugangsdaten werden im Dialog **GitLab** abgelegt und nur im
+Browser (localStorage) gespeichert. Sie werden ausschließlich für einen
+Sync-Aufruf an den lokalen Server übertragen.
+
 ## Agiler Prozess
 
 Das Projekt wird in Sprints entwickelt:

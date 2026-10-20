@@ -42,6 +42,11 @@
   .prio-mittel { color:#ff991f; font-weight:600; }
   .prio-niedrig { color:#36b37e; font-weight:600; }
   #empty { padding:40px; text-align:center; color:var(--muted); }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+           background:var(--text); color:#fff; padding:10px 18px; border-radius:6px;
+           font-size:.85rem; opacity:0; transition:opacity .25s; pointer-events:none; max-width:80vw; }
+  #toast.show { opacity:1; }
+  #toast.error { background:var(--danger); }
   @media (max-width: 900px) { main { grid-template-columns:repeat(2,1fr); } }
   @media (max-width: 550px) { main { grid-template-columns:1fr; } }
 </style>
@@ -52,6 +57,8 @@
   <select id="projectSelect" aria-label="Projekt wählen"></select>
   <button id="newProjectBtn">+ Projekt</button>
   <button id="newItemBtn">+ Eintrag</button>
+  <button id="settingsBtn">GitLab</button>
+  <button id="syncBtn">↻ Sync</button>
 </header>
 <div id="empty">Lade Projekte …</div>
 <main id="board" hidden></main>
@@ -122,6 +129,27 @@
   </form>
 </dialog>
 
+<dialog id="settingsDialog">
+  <form method="dialog" id="settingsForm">
+    <h2>GitLab-Einstellungen</h2>
+    <p style="font-size:.8rem;color:var(--muted);margin-top:0">
+      Zugangsdaten bleiben nur in diesem Browser (localStorage) und werden ausschließlich
+      für den Sync an den lokalen Server gesendet.
+    </p>
+    <label for="sUrl">GitLab-URL</label>
+    <input id="sUrl" name="url" type="url" placeholder="https://gitlab.com">
+    <label for="sGroup">Gruppe (Namespace)</label>
+    <input id="sGroup" name="group" required placeholder="z. B. meine-agile-gruppe">
+    <label for="sToken">Personal Access Token (scope: api)</label>
+    <input id="sToken" name="token" type="password" required placeholder="glpat-…">
+    <div class="error" id="settingsError"></div>
+    <div class="row">
+      <button value="cancel" class="cancel" formnovalidate>Abbrechen</button>
+      <button value="submit" class="primary">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="confirmDialog">
   <form method="dialog" id="confirmForm">
     <h2>Eintrag löschen?</h2>
@@ -132,6 +160,8 @@
     </div>
   </form>
 </dialog>
+
+<div id="toast" role="status"></div>
 
 <script>
 "use strict";
@@ -148,6 +178,24 @@ let projects = [];
 let projectId = null;
 let pendingDelete = null;
 let pendingEdit = null;
+
+const LS_KEY = "pp.gitlab";
+
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
+  catch { return {}; }
+}
+
+function saveSettings(settings) {
+  localStorage.setItem(LS_KEY, JSON.stringify(settings));
+}
+
+function showToast(message, isError = false) {
+  const toast = $("#toast");
+  toast.textContent = message;
+  toast.className = isError ? "show error" : "show";
+  setTimeout(() => { toast.className = ""; }, 4000);
+}
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -299,6 +347,56 @@ $("#confirmForm").addEventListener("submit", async (e) => {
     await loadProjects();
   } catch (err) {
     alert(err.message);
+  }
+});
+
+$("#settingsBtn").addEventListener("click", () => {
+  const s = loadSettings();
+  $("#sUrl").value = s.url || "";
+  $("#sGroup").value = s.group || "";
+  $("#sToken").value = s.token || "";
+  $("#settingsError").textContent = "";
+  $("#settingsDialog").showModal();
+});
+
+$("#settingsForm").addEventListener("submit", (e) => {
+  if (e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  saveSettings({
+    url: $("#sUrl").value.trim(),
+    group: $("#sGroup").value.trim(),
+    token: $("#sToken").value.trim(),
+  });
+  $("#settingsDialog").close();
+  showToast("GitLab-Einstellungen gespeichert.");
+});
+
+$("#syncBtn").addEventListener("click", async () => {
+  const s = loadSettings();
+  if (!s.group || !s.token) {
+    $("#settingsBtn").click();
+    showToast("Zuerst GitLab-Zugangsdaten hinterlegen.", true);
+    return;
+  }
+  const btn = $("#syncBtn");
+  btn.disabled = true;
+  btn.textContent = "Sync …";
+  try {
+    const data = await api("/api/sync", {
+      url: s.url, group: s.group, token: s.token,
+      project_id: projects.length === 1 ? projectId : undefined,
+    });
+    if (data.error) {
+      showToast("Sync-Fehler: " + data.error, true);
+    } else {
+      const total = data.results.reduce((sum, r) => sum + r.created + r.updated, 0);
+      showToast(data.results.map((r) => `${r.project}: ${r.created} neu, ${r.updated} aktualisiert`).join(" · ") || "Nichts zu synchronisieren.");
+    }
+  } catch (err) {
+    showToast("Sync-Fehler: " + err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "↻ Sync";
   }
 });
 

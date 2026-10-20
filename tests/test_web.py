@@ -115,6 +115,16 @@ class WebApiTest(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("error", data)
 
+    def test_11_sync_requires_credentials(self) -> None:
+        status, data = request("/api/sync", {})
+        self.assertEqual(status, 400)
+        self.assertIn("error", data)
+
+    def test_12_sync_missing_group_fails(self) -> None:
+        status, data = request("/api/sync", {"token": "t", "group": ""})
+        self.assertEqual(status, 400)
+        self.assertIn("error", data)
+
     def test_10_persistence(self) -> None:
         status, projects = request("/api/projects")
         self.assertEqual(status, 200)
