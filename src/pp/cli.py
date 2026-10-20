@@ -10,6 +10,7 @@ from .model import PRIORITIES, STATUSES, Item, Project
 from .store import Store
 from .web import serve
 from .gitlab_sync import client_from_env, sync_project
+from .auth import OAuthConfig
 DEFAULT_DB = Path("projects.json")
 
 
@@ -130,6 +131,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve = sub.add_parser("serve", help="HTML5-Board im Browser starten")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8000)
+    p_serve.add_argument("--base-url", default=None,
+                         help="Öffentliche Basis-URL für OAuth-Callback (Default: http://host:port)")
+    p_serve.add_argument("--github-client-id", default=None, help="GitHub-OAuth-Client-ID")
+    p_serve.add_argument("--github-client-secret", default=None, help="GitHub-OAuth-Client-Secret")
     p_serve.set_defaults(func=cmd_serve)
 
     p_sync = sub.add_parser("sync", help="Projekte zu GitLab synchronisieren (Repo je Projekt, Issue je Eintrag)")
@@ -140,7 +145,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def cmd_serve(args: argparse.Namespace, store: Store) -> None:
-    serve(args.host, args.port, store.path)
+    oauth = OAuthConfig.from_env()
+    if oauth is None and (args.github_client_id or args.github_client_secret):
+        sys.exit("Für GitHub-Login sind GITHUB_CLIENT_ID und GITHUB_CLIENT_SECRET nötig (Env oder Optionen).")
+    serve(
+        args.host, args.port, store.path,
+        oauth=oauth,
+        base_url=args.base_url,
+    )
 
 
 def cmd_sync(args: argparse.Namespace, store: Store) -> None:

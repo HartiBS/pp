@@ -453,7 +453,14 @@ $("#projectSelect").addEventListener("change", (e) => {
   render();
 });
 
-loadProjects();
+fetch("/api/projects").then((r) => {
+  if (r.status === 401) {
+    window.location.href = "/auth/login";
+  } else {
+    $("#logoutLink").hidden = false;
+    loadProjects();
+  }
+}).catch(() => loadProjects());
 </script>
 </body>
 </html>

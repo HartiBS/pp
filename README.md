@@ -42,6 +42,28 @@ Die Webapp unter `serve` unterstützt die komplette Verwaltung im Browser:
 Projekte anlegen, Backlog-Einträge mit Priorität anlegen, Status per
 Drag & Drop ändern und Einträge löschen.
 
+## Authentifizierung per GitHub-Login (optional)
+
+Der Boardserver kann Zugriff nur nach GitHub-OAuth-Login erlauben.
+Ohne Konfiguration bleibt der lokale Modus ohne Login aktiv.
+
+1. GitHub-OAuth-App anlegen: Settings → Developer settings → OAuth Apps,
+   Callback-URL `http://localhost:8000/auth/callback`
+2. Server starten:
+
+```bash
+export GITHUB_CLIENT_ID=<id>
+export GITHUB_CLIENT_SECRET=<secret>
+# optional: Zugriff einschränken
+export GITHUB_ALLOWED_USERS=alice,bob
+
+PYTHONPATH=src python3 -m pp.cli serve --base-url http://localhost:8000
+```
+
+Besuchende werden auf GitHub angemeldet; danach gilt eine Session (12 h,
+Cookie `HttpOnly; SameSite=Lax`). Ohne `GITHUB_ALLOWED_USERS` ist jeder
+GitHub-Nutzer zugelassen. Abmelden über den Link in der Kopfzeile.
+
 ## GitLab-Sync
 
 Jedes pp-Projekt wird als eigenes GitLab-Repository in einer Gruppe

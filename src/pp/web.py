@@ -3,18 +3,31 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from .auth import (
+    OAuthConfig, SESSION_COOKIE, SessionStore, authorize_url, decode_cookie,
+    encode_cookie, exchange_code, fetch_user, user_allowed,
+)
 from .model import PRIORITIES, STATUSES, Item, Project
 from .gitlab_sync import GitLabClient, GitLabError, sync_project
 from .store import Store
+
+class BoardConfig:
+    def __init__(self, oauth: OAuthConfig | None, base_url: str) -> None:
+        self.oauth = oauth
+        self.base_url = base_url.rstrip("/")
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
 
 class Handler(BaseHTTPRequestHandler):
     store: Store
+    sessions: SessionStore
+    oauth: OAuthConfig | None
+    base_url: str
 
     def _send_json(self, data: object, status: int = 200) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -31,7 +44,70 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(html)
 
+    def _session_user(self, path_is_public: bool) -> dict | None:
+        if self.oauth is None:
+            return {"login": "local", "public": True}
+        token = decode_cookie(self.headers.get("Cookie"))
+        session = self.sessions.get(token) if token else None
+        if session is not None:
+            return session["user"]
+        return None
+
     def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/auth/login" and self.oauth is not None:
+            state = self.sessions.new_state()
+            url = authorize_url(self.oauth, state, self.base_url + "/auth/callback")
+            self.send_response(302)
+            self.send_header("Location", url)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if self.path.startswith("/auth/callback") and self.oauth is not None:
+            query = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(query)
+            state = params.get("state", [""])[0]
+            code = params.get("code", [""])[0]
+            if not code or not self.sessions.pop_state(state):
+                self._send_json({"error": "ungültiger OAuth-Callback"}, 400)
+                return
+            try:
+                access_token = exchange_code(self.oauth, code)
+                user = fetch_user(access_token)
+            except (ValueError, OSError) as exc:
+                self._send_json({"error": f"GitHub-Login fehlgeschlagen: {exc}"}, 502)
+                return
+            if not user_allowed(self.oauth, user):
+                self._send_json({"error": "Zugang nicht erlaubt"}, 403)
+                return
+            token = self.sessions.create(user)
+            self.send_response(302)
+            self.send_header("Location", "/")
+            self.send_header("Set-Cookie", encode_cookie(token))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        if self.path == "/auth/logout":
+            token = decode_cookie(self.headers.get("Cookie"))
+            if token:
+                self.sessions.drop(token)
+            if self.oauth is None:
+                self._send_json({"ok": True})
+            else:
+                self.send_response(302)
+                self.send_header("Location", "/")
+                self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; Path=/; Max-Age=0")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+            return
+        if self.oauth is not None and self._session_user(False) is None:
+            if self.path.startswith("/api/"):
+                self._send_json({"error": "nicht angemeldet"}, 401)
+            else:
+                self.send_response(302)
+                self.send_header("Location", "/auth/login")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+            return
         if self.path in ("/", "/index.html"):
             self._send_html((WEB_DIR / "index.html").read_bytes())
         elif self.path == "/api/projects":
@@ -42,6 +118,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "nicht gefunden"}, 404)
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.oauth is not None and self._session_user(False) is None:
+            self._send_json({"error": "nicht angemeldet"}, 401)
+            return
         if self.path not in ("/api/projects", "/api/items", "/api/move", "/api/update", "/api/delete", "/api/sync"):
             self._send_json({"error": "nicht gefunden"}, 404)
             return
@@ -148,10 +227,17 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-def serve(host: str, port: int, db: Path) -> None:
-    handler = type("BoundHandler", (Handler,), {"store": Store(db)})
+def serve(host: str, port: int, db: Path, oauth: OAuthConfig | None = None,
+          base_url: str | None = None) -> None:
+    handler = type("BoundHandler", (Handler,), {
+        "store": Store(db),
+        "sessions": SessionStore(),
+        "oauth": oauth,
+        "base_url": (base_url or f"http://{host}:{port}").rstrip("/"),
+    })
     server = ThreadingHTTPServer((host, port), handler)
-    print(f"pp-Board: http://{host}:{port}  (Strg+C zum Beenden)")
+    mode = "GitHub-Login aktiv" if oauth else "lokaler Modus ohne Login"
+    print(f"pp-Board: http://{host}:{port}  ({mode}, Strg+C zum Beenden)")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
