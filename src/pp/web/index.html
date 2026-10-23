@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pp – Agile Projekte</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --accent:#2c5cc5; --text:#172b4d; --muted:#6b778c; --danger:#de350b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+  header { background:var(--accent); color:#fff; padding:12px 24px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  header h1 { margin:0; font-size:1.1rem; }
+  header select, header input, header button { padding:6px 10px; border:none; border-radius:4px; font-size:.9rem; }
+  header button { background:#fff; color:var(--accent); font-weight:600; cursor:pointer; }
+  dialog { border:none; border-radius:8px; box-shadow:0 8px 30px rgba(9,30,66,.25); padding:24px; width:min(420px,90vw); }
+  dialog::backdrop { background:rgba(9,30,66,.5); }
+  dialog h2 { margin:0 0 16px; font-size:1.05rem; }
+  dialog label { display:block; font-size:.85rem; color:var(--muted); margin:12px 0 4px; }
+  dialog input, dialog select { width:100%; padding:8px; border:1px solid #d1d5da; border-radius:4px; font-size:.95rem; }
+  dialog .row { display:flex; gap:8px; justify-content:flex-end; margin-top:20px; }
+  dialog button { padding:8px 16px; border:none; border-radius:4px; cursor:pointer; font-size:.9rem; }
+  dialog .primary { background:var(--accent); color:#fff; }
+  dialog .cancel { background:#ebecf0; }
+  .error { color:var(--danger); font-size:.85rem; margin-top:10px; min-height:1em; }
+  main { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; padding:24px; }
+  .column { background:#ebecf0; border-radius:8px; padding:8px; min-height:200px; }
+  .column h2 { font-size:.85rem; text-transform:uppercase; color:var(--muted);
+               margin:4px 8px 12px; display:flex; justify-content:space-between; }
+  .card { background:var(--card); border-radius:6px; box-shadow:0 1px 2px rgba(9,30,66,.2);
+          padding:10px; margin-bottom:8px; cursor:grab; position:relative; }
+  .card.dragging { opacity:.5; }
+  .card .title { font-size:.9rem; padding-right:22px; }
+  .card .meta { font-size:.75rem; color:var(--muted); margin-top:6px;
+                display:flex; gap:8px; justify-content:space-between; }
+  .card .del { position:absolute; top:6px; right:8px; border:none; background:none; color:var(--muted);
+               cursor:pointer; font-size:1rem; line-height:1; padding:2px 4px; border-radius:4px; }
+  .card .del:hover { color:var(--danger); background:#ffebe6; }
+  .card .edit { position:absolute; top:4px; right:34px; border:none; background:none; color:var(--muted);
+                cursor:pointer; font-size:.8rem; line-height:1; padding:3px 4px; border-radius:4px; }
+  .card .edit:hover { color:var(--accent); background:#e6ecff; }
+  .prio-hoch { color:#de350b; font-weight:600; }
+  .prio-mittel { color:#ff991f; font-weight:600; }
+  .prio-niedrig { color:#36b37e; font-weight:600; }
+  #empty { padding:40px; text-align:center; color:var(--muted); }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+           background:var(--text); color:#fff; padding:10px 18px; border-radius:6px;
+           font-size:.85rem; opacity:0; transition:opacity .25s; pointer-events:none; max-width:80vw; }
+  #toast.show { opacity:1; }
+  #toast.error { background:var(--danger); }
+  @media (max-width: 900px) { main { grid-template-columns:repeat(2,1fr); } }
+  @media (max-width: 550px) { main { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>pp – Agile Projekte</h1>
+  <select id="projectSelect" aria-label="Projekt wählen"></select>
+  <button id="newProjectBtn">+ Projekt</button>
+  <button id="newItemBtn">+ Eintrag</button>
+  <button id="settingsBtn">GitLab</button>
+  <button id="syncBtn">↻ Sync</button>
+</header>
+<div id="empty">Lade Projekte …</div>
+<main id="board" hidden></main>
+
+<dialog id="projectDialog">
+  <form method="dialog" id="projectForm">
+    <h2>Neues Projekt</h2>
+    <label for="pId">Kürzel (ID)</label>
+    <input id="pId" name="id" required pattern="[\\w-]+" placeholder="z. B. web-2024">
+    <label for="pName">Name</label>
+    <input id="pName" name="name" required placeholder="z. B. Website Relaunch">
+    <label for="pDesc">Beschreibung (optional)</label>
+    <input id="pDesc" name="description" placeholder="Kurzbeschreibung">
+    <div class="error" id="projectError"></div>
+    <div class="row">
+      <button value="cancel" class="cancel" formnovalidate>Abbrechen</button>
+      <button value="submit" class="primary">Anlegen</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="itemDialog">
+  <form method="dialog" id="itemForm">
+    <h2>Neuer Backlog-Eintrag</h2>
+    <label for="iId">Kürzel (ID)</label>
+    <input id="iId" name="id" required pattern="[\\w-]+" placeholder="z. B. i-001">
+    <label for="iTitle">Titel</label>
+    <input id="iTitle" name="title" required placeholder="Was ist zu tun?">
+    <label for="iPrio">Priorität</label>
+    <select id="iPrio" name="priority">
+      <option value="hoch">Hoch</option>
+      <option value="mittel" selected>Mittel</option>
+      <option value="niedrig">Niedrig</option>
+    </select>
+    <div class="error" id="itemError"></div>
+    <div class="row">
+      <button value="cancel" class="cancel" formnovalidate>Abbrechen</button>
+      <button value="submit" class="primary">Hinzufügen</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="editDialog">
+  <form method="dialog" id="editForm">
+    <h2>Eintrag bearbeiten</h2>
+    <label for="eId">Kürzel (ID)</label>
+    <input id="eId" disabled>
+    <label for="eTitle">Titel</label>
+    <input id="eTitle" name="title" required>
+    <label for="ePrio">Priorität</label>
+    <select id="ePrio" name="priority">
+      <option value="hoch">Hoch</option>
+      <option value="mittel">Mittel</option>
+      <option value="niedrig">Niedrig</option>
+    </select>
+    <label for="eStatus">Status</label>
+    <select id="eStatus" name="status">
+      <option value="offen">Offen</option>
+      <option value="in_arbeit">In Arbeit</option>
+      <option value="pruefung">Prüfung</option>
+      <option value="fertig">Fertig</option>
+    </select>
+    <div class="error" id="editError"></div>
+    <div class="row">
+      <button value="cancel" class="cancel" formnovalidate>Abbrechen</button>
+      <button value="submit" class="primary">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settingsDialog">
+  <form method="dialog" id="settingsForm">
+    <h2>GitLab-Einstellungen</h2>
+    <p style="font-size:.8rem;color:var(--muted);margin-top:0">
+      Zugangsdaten bleiben nur in diesem Browser (localStorage) und werden ausschließlich
+      für den Sync an den lokalen Server gesendet.
+    </p>
+    <label for="sUrl">GitLab-URL</label>
+    <input id="sUrl" name="url" type="url" placeholder="https://gitlab.com">
+    <label for="sGroup">Gruppe (Namespace)</label>
+    <input id="sGroup" name="group" required placeholder="z. B. meine-agile-gruppe">
+    <label for="sToken">Personal Access Token (scope: api)</label>
+    <input id="sToken" name="token" type="password" required placeholder="glpat-…">
+    <div class="error" id="settingsError"></div>
+    <div class="row">
+      <button value="cancel" class="cancel" formnovalidate>Abbrechen</button>
+      <button value="submit" class="primary">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirmDialog">
+  <form method="dialog" id="confirmForm">
+    <h2>Eintrag löschen?</h2>
+    <p id="confirmText" style="font-size:.9rem;color:var(--muted)"></p>
+    <div class="row">
+      <button value="cancel" class="cancel">Abbrechen</button>
+      <button value="submit" class="primary" style="background:var(--danger)">Löschen</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+
+const STATUSES = [
+  { key: "offen",     label: "Offen" },
+  { key: "in_arbeit", label: "In Arbeit" },
+  { key: "pruefung",  label: "Prüfung" },
+  { key: "fertig",    label: "Fertig" },
+];
+const PRIO_LABEL = { hoch: "Hoch", mittel: "Mittel", niedrig: "Niedrig" };
+
+let projects = [];
+let projectId = null;
+let pendingDelete = null;
+let pendingEdit = null;
+
+const LS_KEY = "pp.gitlab";
+
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
+  catch { return {}; }
+}
+
+function saveSettings(settings) {
+  localStorage.setItem(LS_KEY, JSON.stringify(settings));
+}
+
+function showToast(message, isError = false) {
+  const toast = $("#toast");
+  toast.textContent = message;
+  toast.className = isError ? "show error" : "show";
+  setTimeout(() => { toast.className = ""; }, 4000);
+}
+
+const $ = (sel) => document.querySelector(sel);
+
+async function api(path, payload) {
+  const options = payload === undefined
+    ? {}
+    : { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload) };
+  const response = await fetch(path, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  return data;
+}
+
+async function loadProjects() {
+  projects = await api("/api/projects");
+  const select = $("#projectSelect");
+  select.innerHTML = "";
+  if (projects.length === 0) {
+    $("#empty").textContent = "Noch kein Projekt – lege eines über \"+ Projekt\" an.";
+    $("#empty").hidden = false;
+    $("#board").hidden = true;
+    return;
+  }
+  for (const p of projects) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = `${p.name} (${p.id})`;
+    select.append(opt);
+  }
+  if (!projects.some((p) => p.id === projectId)) projectId = projects[0].id;
+  select.value = projectId;
+  render();
+}
+
+function render() {
+  const project = projects.find((p) => p.id === projectId);
+  const board = $("#board");
+  board.innerHTML = "";
+  $("#empty").hidden = true;
+  board.hidden = false;
+  for (const status of STATUSES) {
+    const column = document.createElement("section");
+    column.className = "column";
+    const items = project.items.filter((i) => i.status === status.key);
+    const h2 = document.createElement("h2");
+    h2.innerHTML = `<span></span><span></span>`;
+    h2.firstChild.textContent = status.label;
+    h2.lastChild.textContent = items.length;
+    column.append(h2);
+    for (const item of items) column.append(renderCard(item));
+    column.addEventListener("dragover", (e) => e.preventDefault());
+    column.addEventListener("drop", (e) => onDrop(e, status.key));
+    board.append(column);
+  }
+}
+
+function renderCard(item) {
+  const card = document.createElement("article");
+  card.className = "card";
+  card.draggable = true;
+  const edit = document.createElement("button");
+  edit.className = "edit";
+  edit.textContent = "✎";
+  edit.title = "Eintrag bearbeiten";
+  edit.addEventListener("click", (e) => { e.stopPropagation(); openEdit(item); });
+  const del = document.createElement("button");
+  del.className = "del";
+  del.textContent = "×";
+  del.title = "Eintrag löschen";
+  del.addEventListener("click", (e) => { e.stopPropagation(); confirmDelete(item); });
+  const title = document.createElement("div");
+  title.className = "title";
+  title.textContent = item.title;
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  const idSpan = document.createElement("span");
+  idSpan.textContent = item.id;
+  const prioSpan = document.createElement("span");
+  prioSpan.className = `prio prio-${item.priority}`;
+  prioSpan.textContent = PRIO_LABEL[item.priority];
+  meta.append(idSpan, prioSpan);
+  card.append(edit, del, title, meta);
+  card.addEventListener("dragstart", () => {
+    card.classList.add("dragging");
+    card.dataset.itemId = item.id;
+  });
+  card.addEventListener("dragend", () => card.classList.remove("dragging"));
+  return card;
+}
+
+async function onDrop(event, status) {
+  event.preventDefault();
+  const card = document.querySelector(".card.dragging");
+  if (!card) return;
+  try {
+    await api("/api/move", { project_id: projectId, item_id: card.dataset.itemId, status });
+    await loadProjects();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function openEdit(item) {
+  pendingEdit = item;
+  $("#eId").value = item.id;
+  $("#eTitle").value = item.title;
+  $("#ePrio").value = item.priority;
+  $("#eStatus").value = item.status;
+  $("#editError").textContent = "";
+  if (!$("#editDialog").open) $("#editDialog").showModal();
+}
+
+$("#editForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  try {
+    await api("/api/update", {
+      project_id: projectId,
+      item_id: pendingEdit.id,
+      title: $("#eTitle").value.trim(),
+      priority: $("#ePrio").value,
+    });
+    const newStatus = $("#eStatus").value;
+    if (newStatus !== pendingEdit.status) {
+      await api("/api/move", { project_id: projectId, item_id: pendingEdit.id, status: newStatus });
+    }
+    pendingEdit = null;
+    $("#editDialog").close();
+    await loadProjects();
+  } catch (err) {
+    $("#editError").textContent = err.message;
+  }
+});
+
+function confirmDelete(item) {
+  pendingDelete = item;
+  $("#confirmText").textContent = `"${item.title}" (${item.id}) endgültig löschen?`;
+  if (!$("#confirmDialog").open) $("#confirmDialog").showModal();
+}
+
+$("#confirmForm").addEventListener("submit", async (e) => {
+  if (!pendingDelete || e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  try {
+    await api("/api/delete", { project_id: projectId, item_id: pendingDelete.id });
+    pendingDelete = null;
+    $("#confirmDialog").close();
+    await loadProjects();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$("#settingsBtn").addEventListener("click", () => {
+  const s = loadSettings();
+  $("#sUrl").value = s.url || "";
+  $("#sGroup").value = s.group || "";
+  $("#sToken").value = s.token || "";
+  $("#settingsError").textContent = "";
+  $("#settingsDialog").showModal();
+});
+
+$("#settingsForm").addEventListener("submit", (e) => {
+  if (e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  saveSettings({
+    url: $("#sUrl").value.trim(),
+    group: $("#sGroup").value.trim(),
+    token: $("#sToken").value.trim(),
+  });
+  $("#settingsDialog").close();
+  showToast("GitLab-Einstellungen gespeichert.");
+});
+
+$("#syncBtn").addEventListener("click", async () => {
+  const s = loadSettings();
+  if (!s.group || !s.token) {
+    $("#settingsBtn").click();
+    showToast("Zuerst GitLab-Zugangsdaten hinterlegen.", true);
+    return;
+  }
+  const btn = $("#syncBtn");
+  btn.disabled = true;
+  btn.textContent = "Sync …";
+  try {
+    const data = await api("/api/sync", {
+      url: s.url, group: s.group, token: s.token,
+      project_id: projects.length === 1 ? projectId : undefined,
+    });
+    if (data.error) {
+      showToast("Sync-Fehler: " + data.error, true);
+    } else {
+      const total = data.results.reduce((sum, r) => sum + r.created + r.updated, 0);
+      showToast(data.results.map((r) => `${r.project}: ${r.created} neu, ${r.updated} aktualisiert`).join(" · ") || "Nichts zu synchronisieren.");
+    }
+  } catch (err) {
+    showToast("Sync-Fehler: " + err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "↻ Sync";
+  }
+});
+
+$("#newProjectBtn").addEventListener("click", () => {
+  $("#projectForm").reset();
+  $("#projectError").textContent = "";
+  $("#projectDialog").showModal();
+});
+
+$("#projectForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  const payload = {
+    id: $("#pId").value.trim(),
+    name: $("#pName").value.trim(),
+    description: $("#pDesc").value.trim(),
+  };
+  try {
+    const project = await api("/api/projects", payload);
+    projectId = project.id;
+    $("#projectDialog").close();
+    await loadProjects();
+  } catch (err) {
+    $("#projectError").textContent = err.message;
+  }
+});
+
+$("#newItemBtn").addEventListener("click", () => {
+  if (!projectId) return;
+  $("#itemForm").reset();
+  $("#itemError").textContent = "";
+  $("#itemDialog").showModal();
+});
+
+$("#itemForm").addEventListener("submit", async (e) => {
+  if (e.submitter?.value !== "submit") return;
+  e.preventDefault();
+  try {
+    await api("/api/items", {
+      project_id: projectId,
+      id: $("#iId").value.trim(),
+      title: $("#iTitle").value.trim(),
+      priority: $("#iPrio").value,
+    });
+    $("#itemDialog").close();
+    await loadProjects();
+  } catch (err) {
+    $("#itemError").textContent = err.message;
+  }
+});
+
+$("#projectSelect").addEventListener("change", (e) => {
+  projectId = e.target.value;
+  render();
+});
+
+fetch("/api/projects").then((r) => {
+  if (r.status === 401) {
+    window.location.href = "/auth/login";
+  } else {
+    $("#logoutLink").hidden = false;
+    loadProjects();
+  }
+}).catch(() => loadProjects());
+</script>
+</body>
+</html>

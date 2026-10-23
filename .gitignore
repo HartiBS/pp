@@ -1,0 +1,23 @@
+# Abhängigkeiten
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build-Artefakte
+dist/
+build/
+*.egg-info/
+
+# IDE / Editor
+.idea/
+*.swp
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
+
+# Umgebung
+.env
+.env.*
