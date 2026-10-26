@@ -2,6 +2,35 @@ const state = { user: null, currentProject: null };
 
 const $ = (sel) => document.querySelector(sel);
 
+/* ===== THEME TOGGLE ===== */
+function initTheme() {
+  const toggle = $('#theme-toggle');
+  const isLight = document.body.classList.contains('light');
+  toggle.textContent = isLight ? '🌙' : '☀️';
+  toggle.onclick = () => {
+    document.body.classList.toggle('light');
+    const nowLight = document.body.classList.contains('light');
+    toggle.textContent = nowLight ? '🌙' : '☀️';
+    localStorage.setItem('pp-theme', nowLight ? 'light' : 'dark');
+  };
+}
+
+function badgeClass(status) {
+  const map = {
+    todo: 'badge-todo',
+    in_progress: 'badge-in_progress',
+    review: 'badge-review',
+    done: 'badge-done',
+    active: 'badge-active',
+    planning: 'badge-planning',
+  };
+  return map[status] || 'badge-todo';
+}
+
+function avatarInitials(name) {
+  return (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
@@ -16,8 +45,10 @@ async function api(path, options = {}) {
 function setUser(user) {
   state.user = user;
   $('#user-name').textContent = user.name;
+  $('#user-avatar').textContent = avatarInitials(user.name);
   $('#user-box').hidden = false;
-  $('#admin-btn').hidden = user.role !== 'admin';
+  const adminBtn = $('#admin-btn');
+  if (adminBtn) adminBtn.hidden = user.role !== 'admin';
 }
 
 const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view'];
@@ -29,6 +60,7 @@ function show(viewId) {
 }
 
 async function init() {
+  initTheme();
   try {
     const { user } = await api('/api/auth/me');
     setUser(user);
@@ -44,7 +76,7 @@ async function loadDashboard() {
   list.innerHTML = '';
   for (const p of projects) {
     const li = document.createElement('li');
-    li.innerHTML = `<span>${p.name} <small>(${p.task_count} Tasks)</small></span><span class="badge">${p.status}</span>`;
+    li.innerHTML = `<span>${p.name} <small>(${p.task_count} Tasks)</small></span><span class="badge ${badgeClass(p.status)}">${p.status}</span>`;
     li.onclick = () => loadProject(p.id);
     list.appendChild(li);
   }
@@ -56,7 +88,9 @@ async function loadProject(id) {
   state.currentProject = project;
   $('#detail-name').textContent = project.name;
   $('#detail-description').textContent = project.description || '';
-  $('#detail-status').textContent = project.status;
+  const statusBadge = $('#detail-status');
+  statusBadge.textContent = project.status;
+  statusBadge.className = `badge ${badgeClass(project.status)}`;
   const list = $('#task-list');
   list.innerHTML = '';
   for (const t of tasks) {
