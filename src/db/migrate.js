@@ -3,7 +3,21 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../config/database');
 
+async function waitForDb(retries = 30, delayMs = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await db.query('SELECT 1');
+      return;
+    } catch (err) {
+      console.log(`DB not ready (${err.code || err.message}), retry ${i + 1}/${retries}...`);
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  throw new Error('Database not reachable after retries');
+}
+
 async function migrate() {
+  await waitForDb();
   await db.query(`
     CREATE TABLE IF NOT EXISTS migrations (
       id SERIAL PRIMARY KEY,
@@ -12,7 +26,7 @@ async function migrate() {
     );
   `);
 
-  const migrationsDir = path.join(__dirname, 'migrations');
+  const migrationsDir = path.join(__dirname, '..', '..', 'db', 'migrations');
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
   for (const file of files) {
