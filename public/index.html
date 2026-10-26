@@ -5,34 +5,54 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PP – Projektverwaltung</title>
   <link rel="stylesheet" href="/css/style.css">
+  <script>
+    (function() {
+      const theme = localStorage.getItem('pp-theme');
+      if (theme === 'light') document.documentElement.classList.add('light');
+    })();
+  </script>
 </head>
 <body>
   <header class="topbar">
-    <h1>PP – Projektverwaltung</h1>
-    <div id="user-box" hidden>
-      <span id="user-name"></span>
-      <button id="profile-btn">Profil</button>
-      <button id="admin-btn" hidden>Benutzerverwaltung</button>
-      <button id="logout-btn">Abmelden</button>
+    <div class="logo">
+      <div class="logo-icon">PP</div>
+      <span>PROJEKTVERWALTUNG</span>
     </div>
+    <nav>
+      <a href="/design-vorschlaege/">🎨 Designvorschläge</a>
+      <button id="theme-toggle" class="theme-toggle" title="Dark/Light Mode umschalten">🌙</button>
+      <div id="user-box" hidden>
+        <div class="user-avatar" id="user-avatar"></div>
+        <span id="user-name"></span>
+        <button id="profile-btn" class="btn-secondary">Profil</button>
+        <button id="admin-btn" class="btn-secondary" hidden>Benutzerverwaltung</button>
+        <button id="logout-btn">Abmelden</button>
+      </div>
+    </nav>
   </header>
 
   <main id="app">
     <section id="auth-view">
-      <h2>Anmelden</h2>
-      <form id="login-form">
-        <input type="email" name="email" placeholder="E-Mail" required>
-        <input type="password" name="password" placeholder="Passwort" required>
-        <button type="submit">Einloggen</button>
-      </form>
-      <h2>Registrieren</h2>
-      <form id="register-form">
-        <input type="text" name="name" placeholder="Name" required>
-        <input type="email" name="email" placeholder="E-Mail" required>
-        <input type="password" name="password" placeholder="Passwort" required>
-        <button type="submit">Registrieren</button>
-      </form>
-      <p id="auth-error" class="error" hidden></p>
+      <div class="auth-card">
+        <div class="logo" style="justify-content:center; margin-bottom:1.8rem;">
+          <div class="logo-icon">PP</div>
+          <span>PROJEKTVERWALTUNG</span>
+        </div>
+        <h2>Anmelden</h2>
+        <form id="login-form">
+          <input type="email" name="email" placeholder="E-Mail" required>
+          <input type="password" name="password" placeholder="Passwort" required>
+          <button type="submit">Einloggen</button>
+        </form>
+        <h2>Registrieren</h2>
+        <form id="register-form">
+          <input type="text" name="name" placeholder="Name" required>
+          <input type="email" name="email" placeholder="E-Mail" required>
+          <input type="password" name="password" placeholder="Passwort" required>
+          <button type="submit">Registrieren</button>
+        </form>
+        <p id="auth-error" class="error" hidden></p>
+      </div>
     </section>
 
     <section id="dashboard-view" hidden>
@@ -43,8 +63,10 @@
       <form id="project-form" hidden>
         <input type="text" name="name" placeholder="Projektname" required>
         <textarea name="description" placeholder="Beschreibung"></textarea>
-        <button type="submit">Anlegen</button>
-        <button type="button" id="cancel-project-btn">Abbrechen</button>
+        <div style="display:flex; gap:0.75rem;">
+          <button type="submit">Anlegen</button>
+          <button type="button" id="cancel-project-btn" class="btn-secondary">Abbrechen</button>
+        </div>
       </form>
       <ul id="project-list"></ul>
     </section>
@@ -84,7 +106,7 @@
         </label>
         <label>Aktiv <input type="checkbox" name="is_active" checked></label>
         <button type="submit">Speichern</button>
-        <button type="button" id="cancel-user-btn">Abbrechen</button>
+        <button type="button" id="cancel-user-btn" class="btn-secondary">Abbrechen</button>
       </form>
       <table id="user-table">
         <thead>
@@ -96,13 +118,17 @@
 
     <section id="project-detail-view" hidden>
       <button id="back-btn">← Zurück</button>
-      <h2 id="detail-name"></h2>
-      <p id="detail-description"></p>
-      <span id="detail-status" class="badge"></span>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem;">
+        <div>
+          <h2 id="detail-name"></h2>
+          <p id="detail-description"></p>
+        </div>
+        <span id="detail-status" class="badge"></span>
+      </div>
       <h3>Tasks</h3>
       <form id="task-form">
-        <input type="text" name="title" placeholder="Task-Titel" required>
-        <button type="submit">+ Task hinzufügen</button>
+        <input type="text" name="title" placeholder="Neuen Task eingeben..." required>
+        <button type="submit">+ Hinzufügen</button>
       </form>
       <ul id="task-list"></ul>
     </section>
