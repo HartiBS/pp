@@ -11,7 +11,9 @@ services:
       - "5432:5432"
 
   app:
-    build: ..
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     environment:
       NODE_ENV: development
       PORT: 3000
