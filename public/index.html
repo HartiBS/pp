@@ -120,6 +120,17 @@
         </thead>
         <tbody></tbody>
       </table>
+
+      <h2 style="margin-top:2rem;">GitLab-Verbindung</h2>
+      <form id="gitlab-settings-form">
+        <label>GitLab-URL <input type="url" name="base_url" placeholder="https://gitlab.example.com" required></label>
+        <label>Access Token (Personal/Project/Group) <input type="password" name="access_token" required></label>
+        <div style="display:flex; gap:0.75rem;">
+          <button type="submit">Speichern</button>
+          <button type="button" id="test-gitlab-btn" class="btn-secondary">Verbindung testen</button>
+        </div>
+      </form>
+      <p id="gitlab-settings-msg"></p>
     </section>
 
     <section id="project-detail-view" hidden>
@@ -154,6 +165,49 @@
         <button type="submit">+ Hinzufügen</button>
       </form>
       <ul id="task-list"></ul>
+
+      <div id="gitlab-block" style="margin-top:2rem;" hidden>
+        <h3>GitLab-Issues</h3>
+        <form id="gitlab-project-form" style="flex-direction:row; flex-wrap:wrap; align-items:center;">
+          <label style="flex-direction:row; align-items:center; gap:0.5rem;">GitLab-Projekt-ID
+            <input type="number" name="gitlab_project_id" id="gitlab-project-id-input" placeholder="z. B. 42" style="width:120px;">
+          </label>
+          <button type="submit">Verknüpfen</button>
+          <button type="button" id="sync-gitlab-btn" class="btn-secondary">Synchronisieren</button>
+        </form>
+        <form id="gitlab-issue-form" hidden>
+          <input type="text" name="title" placeholder="Issue-Titel" required>
+          <textarea name="description" placeholder="Beschreibung (optional)"></textarea>
+          <div style="display:flex; gap:0.75rem;">
+            <button type="submit">Issue in GitLab anlegen</button>
+            <button type="button" id="cancel-gitlab-issue-btn" class="btn-secondary">Abbrechen</button>
+          </div>
+        </form>
+        <button id="new-gitlab-issue-btn">+ GitLab-Issue anlegen</button>
+        <ul id="gitlab-issue-list"></ul>
+      </div>
+    </section>
+
+    <section id="gitlab-issue-view" hidden>
+      <button id="gitlab-issue-back-btn">← Zurück zum Projekt</button>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
+        <div>
+          <h2 id="gi-title"></h2>
+          <p id="gi-description"></p>
+        </div>
+        <span id="gi-state" class="badge"></span>
+      </div>
+      <div style="display:flex; gap:0.75rem; margin-bottom:1.5rem;">
+        <button id="gi-close-btn">Schließen</button>
+        <button id="gi-reopen-btn" class="btn-secondary" hidden>Wiedereröffnen</button>
+        <a id="gi-web-link" href="#" target="_blank" rel="noopener" style="align-self:center;">In GitLab öffnen ↗</a>
+      </div>
+      <h3>Kommentare</h3>
+      <ul id="gi-comment-list"></ul>
+      <form id="gi-comment-form">
+        <textarea name="note" placeholder="Kommentar schreiben..." required></textarea>
+        <button type="submit">Kommentieren</button>
+      </form>
     </section>
   </main>
 

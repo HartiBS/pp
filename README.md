@@ -70,6 +70,15 @@ App erreichbar unter: http://localhost:3000
 | GET | `/api/projects/:id/members` | Projektmitglieder |
 | POST | `/api/projects/:id/members` | Mitglied hinzufügen/aktualisieren |
 | DELETE | `/api/projects/:id/members/:userId` | Mitglied entfernen |
+| GET | `/api/gitlab/settings` | GitLab-Konfiguration (nur Admin) |
+| PUT | `/api/gitlab/settings` | GitLab-URL & Token speichern (nur Admin) |
+| POST | `/api/gitlab/settings/test` | GitLab-Verbindung testen (nur Admin) |
+| POST | `/api/gitlab/projects/:id/sync` | GitLab-Issues synchronisieren |
+| GET | `/api/gitlab/projects/:id/issues` | Synchronisierte GitLab-Issues |
+| POST | `/api/gitlab/projects/:id/issues` | Issue in GitLab anlegen |
+| PUT | `/api/gitlab/projects/:id/issues/:iid` | Issue bearbeiten / schließen / wiedereröffnen |
+| GET | `/api/gitlab/projects/:id/issues/:iid/comments` | Kommentare laden |
+| POST | `/api/gitlab/projects/:id/issues/:iid/comments` | Kommentar hinzufügen |
 
 ## Rollen
 
@@ -93,6 +102,17 @@ Neben der globalen Rolle gibt es **projektbezogene Rollen** (`project_members`):
 | **Beobachter** | Nur Lesen (Tasks werden als Badges statt Dropdown angezeigt) |
 
 Der **globale Admin** hat in jedem Projekt alle Rechte. Der Projekt-Owner ist implizit Projektmanager und kann nicht entfernt werden. Mitglieder werden in der Projekt-Detailansicht verwaltet.
+
+## GitLab-Integration (Epic 3)
+
+Die App kann Issues direkt mit einer GitLab-Instanz synchronisieren:
+
+1. **Admin** hinterlegt in der Benutzerverwaltung unter „GitLab-Verbindung" die GitLab-URL und ein Access Token (Personal/Project/Group Token mit `api`-Scope)
+2. In der **Projekt-Detailansicht** wird die GitLab-Projekt-ID verknüpft (nur Projektmanager/Admin)
+3. Über **„Synchronisieren"** werden alle Issues des GitLab-Projekts geladen und lokal gespiegelt (`gitlab_issues`)
+4. Neue Issues können direkt aus der App in GitLab angelegt werden; bestehende lassen sich **bearbeiten, kommentieren, schließen und wiedereröffnen**
+
+Rechte: Erstellen/Bearbeiten/Kommentieren erfordert mindestens die projektbezogene Rolle **Entwickler**; Lesen genügt **Beobachter**. Der GitLab-Token wird nur serverseitig verwendet und nie an das Frontend ausgeliefert.
 
 ## Projektstruktur
 

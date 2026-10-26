@@ -72,16 +72,26 @@ router.get('/:id', loadProjectRole, requireProjectPermission('view_project'), as
 
 router.put('/:id', loadProjectRole, requireProjectPermission('edit_project'), async (req, res) => {
   const { name, description, status } = req.body;
+  const resetGitlab = req.body.gitlab_project_id === null || req.body.gitlab_project_id === '';
+  let gitlabId = null;
+  if (!resetGitlab && req.body.gitlab_project_id !== undefined) {
+    const n = Number(req.body.gitlab_project_id);
+    if (!Number.isInteger(n)) {
+      return res.status(400).json({ error: 'gitlab_project_id muss eine ganze Zahl sein' });
+    }
+    gitlabId = n;
+  }
   try {
     const { rows } = await db.query(
       `UPDATE projects
        SET name = COALESCE($1, name),
            description = COALESCE($2, description),
            status = COALESCE($3, status),
+           gitlab_project_id = CASE WHEN $4 THEN NULL WHEN $5::int IS NULL THEN gitlab_project_id ELSE $5::int END,
            updated_at = NOW()
-       WHERE id = $4
+       WHERE id = $6
        RETURNING *`,
-      [name, description, status, req.params.id]
+      [name, description, status, resetGitlab, gitlabId, req.params.id]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Projekt nicht gefunden' });
