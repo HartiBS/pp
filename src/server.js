@@ -5,6 +5,8 @@ const path = require('path');
 
 const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/projects');
+const adminRoutes = require('./routes/admin');
+const { loadUser } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,10 +25,13 @@ app.use(session({
   },
 }));
 
+app.use(loadUser);
+
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
