@@ -14,7 +14,7 @@ async function loadUser(req, res, next) {
   if (!req.session.userId) return next();
   try {
     const { rows } = await db.query(
-      'SELECT id, email, name, role, is_active FROM users WHERE id = $1',
+      'SELECT id, email, username, first_name, last_name, name, role, is_active FROM users WHERE id = $1',
       [req.session.userId]
     );
     if (rows.length === 0 || !rows[0].is_active) {

@@ -169,7 +169,9 @@ async function loadProject(id) {
 async function loadProfile() {
   const { user } = await api('/api/auth/me');
   const form = $('#profile-form');
-  form.name.value = user.name;
+  form.firstName.value = user.first_name || '';
+  form.lastName.value = user.last_name || '';
+  form.username.value = user.username || '';
   form.email.value = user.email;
   form.currentPassword.value = '';
   form.newPassword.value = '';
@@ -186,6 +188,7 @@ async function loadAdmin() {
     const roleLabel = { admin: 'Admin', projektmanager: 'Projektmanager', entwickler: 'Entwickler', beobachter: 'Beobachter' }[u.role] || u.role;
     tr.innerHTML = `
       <td>${u.name}</td>
+      <td>@${u.username}</td>
       <td>${u.email}</td>
       <td><span class="badge">${roleLabel}</span></td>
       <td>${u.is_active ? 'aktiv' : 'deaktiviert'}</td>
@@ -212,7 +215,9 @@ async function loadAdmin() {
 function editUser(u) {
   const form = $('#user-form');
   form.id.value = u.id;
-  form.name.value = u.name;
+  form.firstName.value = u.first_name || '';
+  form.lastName.value = u.last_name || '';
+  form.username.value = u.username || '';
   form.email.value = u.email;
   form.role.value = u.role;
   form.is_active.checked = u.is_active;

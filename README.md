@@ -49,14 +49,14 @@ App erreichbar unter: http://localhost:3000
 
 | Methode | Pfad | Beschreibung |
 |---|---|---|
-| POST | `/api/auth/register` | Registrieren |
-| POST | `/api/auth/login` | Einloggen |
+| POST | `/api/auth/register` | Registrieren (Vorname, Nachname, Benutzername, E-Mail, Passwort) |
+| POST | `/api/auth/login` | Einloggen (mit Benutzername **oder** E-Mail + Passwort) |
 | POST | `/api/auth/logout` | Abmelden |
 | GET | `/api/auth/me` | Aktueller Benutzer |
-| PUT | `/api/auth/profile` | Eigenes Profil bearbeiten (Name, E-Mail, Passwort) |
+| PUT | `/api/auth/profile` | Eigenes Profil bearbeiten (Vorname, Nachname, Benutzername, E-Mail, Passwort) |
 | GET | `/api/admin/users` | Alle Benutzer (nur Admin) |
-| POST | `/api/admin/users` | Benutzer anlegen (nur Admin) |
-| PUT | `/api/admin/users/:id` | Benutzer bearbeiten / aktivieren / deaktivieren (nur Admin) |
+| POST | `/api/admin/users` | Benutzer anlegen inkl. Benutzername (nur Admin) |
+| PUT | `/api/admin/users/:id` | Benutzer bearbeiten (inkl. Benutzername) / aktivieren / deaktivieren (nur Admin) |
 | DELETE | `/api/admin/users/:id` | Benutzer löschen (nur Admin) |
 | GET | `/api/admin/roles` | Verfügbare Rollen |
 | GET | `/api/projects` | Projekte des Benutzers |
