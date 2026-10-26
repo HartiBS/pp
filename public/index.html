@@ -40,13 +40,15 @@
         </div>
         <h2>Anmelden</h2>
         <form id="login-form">
-          <input type="email" name="email" placeholder="E-Mail" required>
+          <input type="text" name="identifier" placeholder="Benutzername oder E-Mail" required>
           <input type="password" name="password" placeholder="Passwort" required>
           <button type="submit">Einloggen</button>
         </form>
         <h2>Registrieren</h2>
         <form id="register-form">
-          <input type="text" name="name" placeholder="Name" required>
+          <input type="text" name="firstName" placeholder="Vorname" required>
+          <input type="text" name="lastName" placeholder="Nachname">
+          <input type="text" name="username" placeholder="Benutzername" pattern="[A-Za-z0-9_.\-]{3,50}" title="3-50 Zeichen: Buchstaben, Zahlen, _ . -" required>
           <input type="email" name="email" placeholder="E-Mail" required>
           <input type="password" name="password" placeholder="Passwort" required>
           <button type="submit">Registrieren</button>
@@ -75,7 +77,9 @@
       <button id="profile-back-btn">← Zurück</button>
       <h2>Profil bearbeiten</h2>
       <form id="profile-form">
-        <label>Name <input type="text" name="name" required></label>
+        <label>Vorname <input type="text" name="firstName" required></label>
+        <label>Nachname <input type="text" name="lastName"></label>
+        <label>Benutzername <input type="text" name="username" pattern="[A-Za-z0-9_.\-]{3,50}" title="3-50 Zeichen: Buchstaben, Zahlen, _ . -" required></label>
         <label>E-Mail <input type="email" name="email" required></label>
         <h3>Passwort ändern</h3>
         <label>Aktuelles Passwort <input type="password" name="currentPassword"></label>
@@ -93,7 +97,9 @@
       </div>
       <form id="user-form" hidden>
         <input type="hidden" name="id">
-        <label>Name <input type="text" name="name" required></label>
+        <label>Vorname <input type="text" name="firstName" required></label>
+        <label>Nachname <input type="text" name="lastName"></label>
+        <label>Benutzername <input type="text" name="username" pattern="[A-Za-z0-9_.\-]{3,50}" title="3-50 Zeichen: Buchstaben, Zahlen, _ . -" required></label>
         <label>E-Mail <input type="email" name="email" required></label>
         <label>Passwort <input type="password" name="password" placeholder="(beim Bearbeiten leer lassen)"></label>
         <label>Rolle
@@ -110,7 +116,7 @@
       </form>
       <table id="user-table">
         <thead>
-          <tr><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Aktionen</th></tr>
+          <tr><th>Name</th><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Aktionen</th></tr>
         </thead>
         <tbody></tbody>
       </table>
