@@ -76,35 +76,91 @@ async function loadDashboard() {
   list.innerHTML = '';
   for (const p of projects) {
     const li = document.createElement('li');
-    li.innerHTML = `<span>${p.name} <small>(${p.task_count} Tasks)</small></span><span class="badge ${badgeClass(p.status)}">${p.status}</span>`;
+    const roleBadge = p.my_role ? `<span class="badge">${PROJECT_ROLE_LABELS[p.my_role] || p.my_role}</span>` : '';
+    li.innerHTML = `<span>${p.name} <small>(${p.task_count} Tasks)</small></span><span style="display:flex; gap:0.4rem;">${roleBadge}<span class="badge ${badgeClass(p.status)}">${p.status}</span></span>`;
     li.onclick = () => loadProject(p.id);
     list.appendChild(li);
   }
   show('dashboard-view');
 }
 
+const PROJECT_ROLE_LABELS = {
+  projektmanager: 'Projektmanager',
+  entwickler: 'Entwickler',
+  beobachter: 'Beobachter',
+  admin: 'Admin',
+};
+
+const canEdit = (role) => role === 'admin' || role === 'projektmanager' || role === 'entwickler';
+const canManageMembers = (role) => role === 'admin' || role === 'projektmanager';
+
+function renderMembers(members, project, myRole) {
+  const list = $('#member-list');
+  list.innerHTML = '';
+
+  const ownerLi = document.createElement('li');
+  ownerLi.innerHTML = `<span>${project.owner_name || 'Owner'} <small>(Owner)</small></span><span class="badge">Projektmanager</span>`;
+  list.appendChild(ownerLi);
+
+  for (const m of members) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${m.name} <small>${m.email}</small></span><span class="badge">${PROJECT_ROLE_LABELS[m.role] || m.role}</span>`;
+    if (canManageMembers(myRole)) {
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = 'Entfernen';
+      removeBtn.className = 'btn-secondary';
+      removeBtn.onclick = async () => {
+        if (!confirm(`${m.name} aus dem Projekt entfernen?`)) return;
+        await api(`/api/projects/${project.id}/members/${m.id}`, { method: 'DELETE' });
+        await loadProject(project.id);
+      };
+      li.appendChild(removeBtn);
+    }
+    list.appendChild(li);
+  }
+
+  $('#add-member-btn').hidden = !canManageMembers(myRole);
+  $('#member-form').hidden = true;
+}
+
 async function loadProject(id) {
-  const { project, tasks } = await api(`/api/projects/${id}`);
+  const { project, tasks, members } = await api(`/api/projects/${id}`);
   state.currentProject = project;
+  state.myProjectRole = project.my_role;
   $('#detail-name').textContent = project.name;
   $('#detail-description').textContent = project.description || '';
   const statusBadge = $('#detail-status');
   statusBadge.textContent = project.status;
   statusBadge.className = `badge ${badgeClass(project.status)}`;
+  const roleBadge = $('#my-role-badge');
+  roleBadge.textContent = PROJECT_ROLE_LABELS[project.my_role] || project.my_role;
+
+  renderMembers(members || [], project, project.my_role);
+
+  const readonly = !canEdit(project.my_role);
+  $('#task-form').hidden = readonly;
+
   const list = $('#task-list');
   list.innerHTML = '';
   for (const t of tasks) {
     const li = document.createElement('li');
-    const select = document.createElement('select');
-    for (const s of ['todo', 'in_progress', 'review', 'done']) {
-      const opt = document.createElement('option');
-      opt.value = s; opt.textContent = s;
-      if (t.status === s) opt.selected = true;
-      select.appendChild(opt);
+    li.innerHTML = `<span>${t.title}${t.assignee_name ? ` <small>(${t.assignee_name})</small>` : ''}</span>`;
+    if (!readonly) {
+      const select = document.createElement('select');
+      for (const s of ['todo', 'in_progress', 'review', 'done']) {
+        const opt = document.createElement('option');
+        opt.value = s; opt.textContent = s;
+        if (t.status === s) opt.selected = true;
+        select.appendChild(opt);
+      }
+      select.onchange = () => api(`/api/projects/${id}/tasks/${t.id}`, { method: 'PUT', body: { status: select.value } });
+      li.appendChild(select);
+    } else {
+      const badge = document.createElement('span');
+      badge.className = `badge ${badgeClass(t.status)}`;
+      badge.textContent = t.status;
+      li.appendChild(badge);
     }
-    select.onchange = () => api(`/api/projects/${id}/tasks/${t.id}`, { method: 'PUT', body: { status: select.value } });
-    li.innerHTML = `<span>${t.title}</span>`;
-    li.appendChild(select);
     list.appendChild(li);
   }
   show('project-detail-view');
@@ -292,5 +348,43 @@ document.addEventListener('submit', async (e) => {
 });
 
 bind('#back-btn', () => loadDashboard());
+
+bind('#add-member-btn', async () => {
+  const select = $('#member-user-select');
+  select.innerHTML = '';
+  try {
+    const { users } = await api('/api/admin/users');
+    const memberIds = (state.currentProject.members || []).map(m => m.id);
+    for (const u of users) {
+      if (!u.is_active) continue;
+      if (u.id === state.currentProject.owner_id) continue;
+      if (memberIds.includes(u.id)) continue;
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = `${u.name} (${u.email})`;
+      select.appendChild(opt);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+  $('#member-form').hidden = false;
+});
+bind('#cancel-member-btn', () => { $('#member-form').hidden = true; });
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'member-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      await api(`/api/projects/${state.currentProject.id}/members`, {
+        method: 'POST',
+        body: { user_id: Number(fd.get('user_id')), role: fd.get('role') },
+      });
+      await loadProject(state.currentProject.id);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+});
 
 init();
