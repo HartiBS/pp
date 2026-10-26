@@ -21,7 +21,7 @@ function setUser(user) {
 }
 
 function show(view) {
-  for (const v of ['auth', 'dashboard', 'detail', 'profile', 'admin']) {
+  for (const v of ['auth', 'dashboard', 'project-detail', 'profile', 'admin']) {
     $(`#${v}-view`).hidden = v !== view;
   }
 }
@@ -71,7 +71,7 @@ async function loadProject(id) {
     li.appendChild(select);
     list.appendChild(li);
   }
-  show('detail');
+  show('project-detail');
 }
 
 async function loadProfile() {
