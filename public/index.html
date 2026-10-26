@@ -125,6 +125,23 @@
         </div>
         <span id="detail-status" class="badge"></span>
       </div>
+      <div style="margin-bottom:1.5rem;">
+        <h3>Team <span id="my-role-badge" class="badge"></span></h3>
+        <div id="members-block">
+          <ul id="member-list"></ul>
+          <form id="member-form" hidden>
+            <select name="user_id" id="member-user-select" required></select>
+            <select name="role" required>
+              <option value="projektmanager">Projektmanager</option>
+              <option value="entwickler">Entwickler</option>
+              <option value="beobachter">Beobachter</option>
+            </select>
+            <button type="submit">+ Mitglied hinzufügen</button>
+            <button type="button" id="cancel-member-btn" class="btn-secondary">Abbrechen</button>
+          </form>
+          <button id="add-member-btn">+ Mitglied hinzufügen</button>
+        </div>
+      </div>
       <h3>Tasks</h3>
       <form id="task-form">
         <input type="text" name="title" placeholder="Neuen Task eingeben..." required>

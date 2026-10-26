@@ -459,3 +459,35 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 }
 
 #profile-back-btn:hover, #admin-back-btn:hover { color: var(--accent-light); background: transparent; }
+
+#member-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+#member-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+}
+
+#member-list li small { color: var(--text-muted); margin-left: 0.4rem; }
+
+#member-form {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+#member-form select { flex: 1; min-width: 180px; }
+
+#my-role-badge { margin-left: 0.4rem; font-weight: 400; }

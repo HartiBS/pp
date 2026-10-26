@@ -66,6 +66,10 @@ App erreichbar unter: http://localhost:3000
 | DELETE | `/api/projects/:id` | Projekt löschen |
 | POST | `/api/projects/:id/tasks` | Task anlegen |
 | PUT | `/api/projects/:id/tasks/:taskId` | Task aktualisieren |
+| DELETE | `/api/projects/:id/tasks/:taskId` | Task löschen |
+| GET | `/api/projects/:id/members` | Projektmitglieder |
+| POST | `/api/projects/:id/members` | Mitglied hinzufügen/aktualisieren |
+| DELETE | `/api/projects/:id/members/:userId` | Mitglied entfernen |
 
 ## Rollen
 
@@ -77,6 +81,18 @@ App erreichbar unter: http://localhost:3000
 | `beobachter` | Nur Lesen |
 
 Der erste registrierte Benutzer wird automatisch **Admin**. Rollen können in der Benutzerverwaltung (nur sichtbar für Admins) geändert werden.
+
+### Projektbezogene Rollen (Epic 2)
+
+Neben der globalen Rolle gibt es **projektbezogene Rollen** (`project_members`):
+
+| Projekt-Rolle | Rechte im Projekt |
+|---|---|
+| **Projektmanager** (Owner + zugewiesen) | Projekt bearbeiten/löschen, Mitglieder verwalten, Tasks anlegen/bearbeiten/löschen |
+| **Entwickler** | Tasks anlegen und bearbeiten |
+| **Beobachter** | Nur Lesen (Tasks werden als Badges statt Dropdown angezeigt) |
+
+Der **globale Admin** hat in jedem Projekt alle Rechte. Der Projekt-Owner ist implizit Projektmanager und kann nicht entfernt werden. Mitglieder werden in der Projekt-Detailansicht verwaltet.
 
 ## Projektstruktur
 
