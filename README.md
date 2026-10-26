@@ -53,6 +53,12 @@ App erreichbar unter: http://localhost:3000
 | POST | `/api/auth/login` | Einloggen |
 | POST | `/api/auth/logout` | Abmelden |
 | GET | `/api/auth/me` | Aktueller Benutzer |
+| PUT | `/api/auth/profile` | Eigenes Profil bearbeiten (Name, E-Mail, Passwort) |
+| GET | `/api/admin/users` | Alle Benutzer (nur Admin) |
+| POST | `/api/admin/users` | Benutzer anlegen (nur Admin) |
+| PUT | `/api/admin/users/:id` | Benutzer bearbeiten / aktivieren / deaktivieren (nur Admin) |
+| DELETE | `/api/admin/users/:id` | Benutzer löschen (nur Admin) |
+| GET | `/api/admin/roles` | Verfügbare Rollen |
 | GET | `/api/projects` | Projekte des Benutzers |
 | POST | `/api/projects` | Projekt anlegen |
 | GET | `/api/projects/:id` | Projekt inkl. Tasks |
@@ -60,6 +66,17 @@ App erreichbar unter: http://localhost:3000
 | DELETE | `/api/projects/:id` | Projekt löschen |
 | POST | `/api/projects/:id/tasks` | Task anlegen |
 | PUT | `/api/projects/:id/tasks/:taskId` | Task aktualisieren |
+
+## Rollen
+
+| Rolle | Rechte |
+|---|---|
+| `admin` | Alles inkl. Benutzerverwaltung |
+| `projektmanager` | Projekte verwalten |
+| `entwickler` | Tasks bearbeiten |
+| `beobachter` | Nur Lesen |
+
+Der erste registrierte Benutzer wird automatisch **Admin**. Rollen können in der Benutzerverwaltung (nur sichtbar für Admins) geändert werden.
 
 ## Projektstruktur
 

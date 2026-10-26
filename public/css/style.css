@@ -82,3 +82,32 @@ button:hover { background: #1d4ed8; }
   background: #e0e7ff;
   color: #3730a3;
 }
+
+#user-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+#user-table th, #user-table td {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e4e7eb;
+}
+
+#user-table td button { margin-right: 0.4rem; padding: 0.35rem 0.7rem; font-size: 0.85rem; }
+
+#user-table td button:last-child { background: #dc2626; }
+#user-table td button:last-child:hover { background: #b91c1c; }
+
+#profile-form label, #user-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+  color: #52606d;
+}
+
+#profile-msg { margin-top: 0.75rem; color: #059669; }
