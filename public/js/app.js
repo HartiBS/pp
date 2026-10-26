@@ -51,7 +51,7 @@ function setUser(user) {
   if (adminBtn) adminBtn.hidden = user.role !== 'admin';
 }
 
-const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view'];
+const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view'];
 
 function show(viewId) {
   for (const id of VIEWS) {
@@ -140,6 +140,13 @@ async function loadProject(id) {
   const readonly = !canEdit(project.my_role);
   $('#task-form').hidden = readonly;
 
+  const gitlabBlock = $('#gitlab-block');
+  gitlabBlock.hidden = false;
+  $('#gitlab-project-id-input').value = project.gitlab_project_id || '';
+  $('#sync-gitlab-btn').disabled = !project.gitlab_project_id;
+  $('#new-gitlab-issue-btn').hidden = readonly || !project.gitlab_project_id;
+  loadGitLabIssues(id);
+
   const list = $('#task-list');
   list.innerHTML = '';
   for (const t of tasks) {
@@ -166,6 +173,76 @@ async function loadProject(id) {
   show('project-detail-view');
 }
 
+function renderGitLabIssues(issues) {
+  const list = $('#gitlab-issue-list');
+  list.innerHTML = '';
+  if (!issues.length) {
+    list.innerHTML = '<li><small style="color:var(--text-muted);">Keine Issues synchronisiert. Jetzt synchronisieren oder neu anlegen.</small></li>';
+    return;
+  }
+  for (const issue of issues) {
+    const li = document.createElement('li');
+    const stateBadge = issue.state === 'opened'
+      ? '<span class="badge badge-active">offen</span>'
+      : '<span class="badge badge-done">geschlossen</span>';
+    li.innerHTML = `<span>#${issue.gitlab_iid} ${issue.title}</span>${stateBadge}`;
+    li.style.cursor = 'pointer';
+    li.onclick = () => loadGitLabIssue(issue);
+    list.appendChild(li);
+  }
+}
+
+async function loadGitLabIssues(projectId) {
+  try {
+    const { issues } = await api(`/api/gitlab/projects/${projectId}/issues`);
+    renderGitLabIssues(issues);
+  } catch (err) {
+    console.error('GitLab-Issues konnten nicht geladen werden:', err.message);
+  }
+}
+
+async function loadGitLabSettings() {
+  try {
+    const s = await api('/api/gitlab/settings');
+    $('#gitlab-settings-form').base_url.value = s.base_url || '';
+    $('#gitlab-settings-form').access_token.value = '';
+    $('#gitlab-settings-msg').textContent = s.configured
+      ? `Konfiguriert: ${s.base_url} (Token gesetzt)`
+      : 'Noch nicht konfiguriert.';
+  } catch (err) {
+    $('#gitlab-settings-msg').textContent = err.message;
+  }
+}
+
+async function loadGitLabIssue(issue) {
+  state.currentGitLabIssue = issue;
+  $('#gi-title').textContent = `#${issue.gitlab_iid} ${issue.title}`;
+  $('#gi-description').textContent = issue.description || '(keine Beschreibung)';
+  const stateBadge = $('#gi-state');
+  stateBadge.textContent = issue.state === 'opened' ? 'offen' : 'geschlossen';
+  stateBadge.className = `badge ${issue.state === 'opened' ? 'badge-active' : 'badge-done'}`;
+  $('#gi-close-btn').hidden = issue.state !== 'opened';
+  $('#gi-reopen-btn').hidden = issue.state !== 'closed';
+  $('#gi-web-link').href = issue.web_url || '#';
+  const commentList = $('#gi-comment-list');
+  commentList.innerHTML = '<li><small>Lade Kommentare...</small></li>';
+  show('gitlab-issue-view');
+  try {
+    const { comments } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}/comments`);
+    commentList.innerHTML = '';
+    if (!comments.length) {
+      commentList.innerHTML = '<li><small style="color:var(--text-muted);">Noch keine Kommentare.</small></li>';
+    }
+    for (const c of comments) {
+      const li = document.createElement('li');
+      li.innerHTML = `<small>${c.author && c.author.name ? c.author.name : 'Unbekannt'} · ${new Date(c.created_at).toLocaleString('de-DE')}</small><br>${c.body}`;
+      commentList.appendChild(li);
+    }
+  } catch (err) {
+    commentList.innerHTML = `<li><small class="error">Kommentare konnten nicht geladen werden: ${err.message}</small></li>`;
+  }
+}
+
 async function loadProfile() {
   const { user } = await api('/api/auth/me');
   const form = $('#profile-form');
@@ -180,6 +257,7 @@ async function loadProfile() {
 }
 
 async function loadAdmin() {
+  loadGitLabSettings();
   const { users } = await api('/api/admin/users');
   const tbody = $('#user-table tbody');
   tbody.innerHTML = '';
@@ -353,6 +431,119 @@ document.addEventListener('submit', async (e) => {
 });
 
 bind('#back-btn', () => loadDashboard());
+
+bind('#test-gitlab-btn', async () => {
+  const msg = $('#gitlab-settings-msg');
+  msg.textContent = 'Teste Verbindung...';
+  try {
+    const fd = new FormData($('#gitlab-settings-form'));
+    await api('/api/gitlab/settings', { method: 'PUT', body: Object.fromEntries(fd) });
+    const { ok } = await api('/api/gitlab/settings/test', { method: 'POST' });
+    if (ok) msg.textContent = 'Verbindung erfolgreich! ✅';
+  } catch (err) {
+    msg.textContent = `Fehler: ${err.message}`;
+  }
+});
+
+bind('#sync-gitlab-btn', async () => {
+  const btn = $('#sync-gitlab-btn');
+  btn.disabled = true;
+  btn.textContent = 'Synchronisiere...';
+  try {
+    const { issues } = await api(`/api/gitlab/projects/${state.currentProject.id}/sync`, { method: 'POST' });
+    renderGitLabIssues(issues);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Synchronisieren';
+  }
+});
+
+bind('#new-gitlab-issue-btn', () => { $('#gitlab-issue-form').hidden = false; });
+bind('#cancel-gitlab-issue-btn', () => { $('#gitlab-issue-form').hidden = true; });
+
+bind('#gitlab-issue-back-btn', () => loadProject(state.currentProject.id));
+
+bind('#gi-close-btn', async () => {
+  const issue = state.currentGitLabIssue;
+  try {
+    await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
+      method: 'PUT', body: { state_event: 'close' },
+    });
+    await loadGitLabIssue({ ...issue, state: 'closed' });
+    await loadGitLabIssues(state.currentProject.id);
+  } catch (err) { alert(err.message); }
+});
+
+bind('#gi-reopen-btn', async () => {
+  const issue = state.currentGitLabIssue;
+  try {
+    await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
+      method: 'PUT', body: { state_event: 'reopen' },
+    });
+    await loadGitLabIssue({ ...issue, state: 'opened' });
+    await loadGitLabIssues(state.currentProject.id);
+  } catch (err) { alert(err.message); }
+});
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'gitlab-settings-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      await api('/api/gitlab/settings', { method: 'PUT', body: Object.fromEntries(fd) });
+      $('#gitlab-settings-msg').textContent = 'GitLab-Einstellungen gespeichert.';
+      e.target.access_token.value = '';
+    } catch (err) {
+      $('#gitlab-settings-msg').textContent = err.message;
+    }
+  }
+});
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'gitlab-project-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const value = fd.get('gitlab_project_id');
+    try {
+      await api(`/api/projects/${state.currentProject.id}`, {
+        method: 'PUT',
+        body: { gitlab_project_id: value === '' ? null : Number(value) },
+      });
+      await loadProject(state.currentProject.id);
+    } catch (err) { alert(err.message); }
+  }
+});
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'gitlab-issue-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      await api(`/api/gitlab/projects/${state.currentProject.id}/issues`, {
+        method: 'POST', body: Object.fromEntries(fd),
+      });
+      $('#gitlab-issue-form').hidden = true;
+      e.target.reset();
+      await loadGitLabIssues(state.currentProject.id);
+    } catch (err) { alert(err.message); }
+  }
+});
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'gi-comment-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${state.currentGitLabIssue.gitlab_iid}/comments`, {
+        method: 'POST', body: { note: fd.get('note') },
+      });
+      e.target.reset();
+      await loadGitLabIssue(state.currentGitLabIssue);
+    } catch (err) { alert(err.message); }
+  }
+});
 
 bind('#add-member-btn', async () => {
   const select = $('#member-user-select');

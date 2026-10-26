@@ -24,6 +24,7 @@ services:
       PORT: 3000
       DATABASE_URL: postgres://pp_user:pp_password@db:5432/pp_db
       SESSION_SECRET: dev-secret-change-me
+      # GITLAB_URL: https://gitlab.example.com
     ports:
       - "3000:3000"
     depends_on:

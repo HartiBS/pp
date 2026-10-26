@@ -6,6 +6,7 @@ const path = require('path');
 const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/projects');
 const adminRoutes = require('./routes/admin');
+const gitlabRoutes = require('./routes/gitlab');
 const { loadUser } = require('./middleware/auth');
 
 const app = express();
@@ -32,6 +33,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/gitlab', gitlabRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
