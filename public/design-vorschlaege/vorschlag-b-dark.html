@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vorschlag B: Dark Professional – Klickdummy</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #0b1120;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+    /* ===== TOPBAR ===== */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 2rem;
+      height: 64px;
+      background: #111a2e;
+      border-bottom: 1px solid #1e293b;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: 0.5px;
+    }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: #0d9488;
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 0.85rem; font-weight: 800;
+    }
+    .user-box { display: flex; align-items: center; gap: 1rem; }
+    .user-avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      background: #0d9488;
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 0.8rem;
+    }
+    .btn-logout {
+      padding: 0.4rem 1rem;
+      background: transparent;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 0.8rem;
+    }
+    .btn-logout:hover { border-color: #ef4444; color: #ef4444; }
+
+    /* ===== LAYOUT ===== */
+    .main { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+    .page-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; letter-spacing: -0.3px; }
+    .page-sub { color: #64748b; margin-bottom: 1.5rem; font-size: 0.9rem; }
+
+    /* ===== BUTTONS ===== */
+    .btn-primary {
+      padding: 0.6rem 1.3rem;
+      background: #0d9488;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.875rem;
+      letter-spacing: 0.3px;
+    }
+    .btn-primary:hover { background: #0f766e; }
+    .btn-secondary {
+      padding: 0.6rem 1.3rem;
+      background: transparent;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .btn-secondary:hover { border-color: #64748b; color: #e2e8f0; }
+
+    /* ===== AUTH ===== */
+    .auth-wrapper { display: flex; justify-content: center; padding-top: 4rem; }
+    .auth-card {
+      background: #111a2e;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 400px;
+    }
+    .auth-card h2 { font-size: 1.2rem; margin-bottom: 1.5rem; font-weight: 600; }
+    .auth-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid #1e293b;
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 0.7rem;
+      text-align: center;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #64748b;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .auth-tab.active { color: #2dd4bf; border-bottom-color: #2dd4bf; }
+
+    /* ===== FORMS ===== */
+    .form-group { margin-bottom: 1.1rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 0.4rem;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 0.7rem 0.9rem;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      background: #0b1120;
+      color: #e2e8f0;
+      transition: border-color 0.15s;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #0d9488;
+    }
+    input::placeholder, textarea::placeholder { color: #475569; }
+
+    /* ===== PROJECT CARDS ===== */
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .project-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    .project-card {
+      background: #111a2e;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 1.5rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .project-card:hover { border-color: #0d9488; }
+    .project-card h3 { font-size: 1rem; margin-bottom: 0.4rem; font-weight: 600; }
+    .project-card p { font-size: 0.85rem; color: #64748b; margin-bottom: 1.2rem; }
+    .project-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 1rem;
+      border-top: 1px solid #1e293b;
+    }
+    .task-count { font-size: 0.8rem; color: #64748b; }
+
+    /* ===== BADGES ===== */
+    .badge {
+      padding: 0.25rem 0.7rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .badge-active { background: rgba(45,212,191,0.12); color: #2dd4bf; }
+    .badge-planning { background: rgba(251,191,36,0.12); color: #fbbf24; }
+    .badge-done { background: rgba(96,165,250,0.12); color: #60a5fa; }
+    .badge-todo { background: rgba(148,163,184,0.1); color: #94a3b8; }
+    .badge-in_progress { background: rgba(251,146,60,0.12); color: #fb923c; }
+    .badge-review { background: rgba(167,139,250,0.12); color: #a78bfa; }
+
+    /* ===== TASK LIST ===== */
+    .task-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem; }
+    .task-item {
+      background: #111a2e;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 0.9rem 1.2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 0.8rem;
+      margin-bottom: 1.2rem;
+      background: none; border: none;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+    .back-btn:hover { color: #2dd4bf; }
+
+    /* ===== DUMMY NAV ===== */
+    .dummy-nav {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 0.4rem;
+      display: flex;
+      gap: 0.3rem;
+      z-index: 100;
+    }
+    .dummy-nav button {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+    .dummy-nav button.active { background: #0d9488; color: #fff; }
+    .dummy-banner {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #0d9488;
+      color: #fff;
+      text-align: center;
+      padding: 0.3rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      z-index: 200;
+    }
+    body { padding-top: 28px; }
+  </style>
+</head>
+<body>
+  <div class="dummy-banner">🎨 KLICKDUMMY – Vorschlag B: Dark Professional</div>
+
+  <header class="topbar" id="topbar" hidden>
+    <div class="logo">
+      <div class="logo-icon">PP</div>
+      <span>PROJEKTVERWALTUNG</span>
+    </div>
+    <div class="user-box">
+      <div class="user-avatar">MM</div>
+      <span style="font-size:0.85rem;">Max Mustermann</span>
+      <button class="btn-logout">Abmelden</button>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- ===== ANSICHT 1: LOGIN ===== -->
+    <section id="view-auth">
+      <div class="auth-wrapper">
+        <div class="auth-card">
+          <div class="logo" style="justify-content:center; margin-bottom:1.8rem;">
+            <div class="logo-icon">PP</div>
+            <span>PROJEKTVERWALTUNG</span>
+          </div>
+          <div class="auth-tabs">
+            <div class="auth-tab active">ANMELDEN</div>
+            <div class="auth-tab">REGISTRIEREN</div>
+          </div>
+          <form onsubmit="return false">
+            <div class="form-group">
+              <label>E-Mail</label>
+              <input type="email" placeholder="max@beispiel.de" value="max@beispiel.de">
+            </div>
+            <div class="form-group">
+              <label>Passwort</label>
+              <input type="password" placeholder="••••••••" value="password">
+            </div>
+            <button class="btn-primary" style="width:100%; margin-top:0.5rem;">EINLOGGEN</button>
+          </form>
+          <p style="text-align:center; color:#475569; font-size:0.78rem; margin-top:1.2rem;">
+            Noch kein Konto? <span style="color:#2dd4bf; cursor:pointer;">Registrieren</span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== ANSICHT 2: DASHBOARD ===== -->
+    <section id="view-dashboard" hidden>
+      <div class="dashboard-header">
+        <div>
+          <div class="page-title">Meine Projekte</div>
+          <div class="page-sub">3 aktive Projekte</div>
+        </div>
+        <button class="btn-primary">+ NEUES PROJEKT</button>
+      </div>
+
+      <div id="new-project-form" hidden style="background:#111a2e; border:1px solid #1e293b; border-radius:10px; padding:1.5rem; margin-bottom:1.5rem;">
+        <h3 style="margin-bottom:1rem; font-size:1rem;">Neues Projekt anlegen</h3>
+        <div class="form-group">
+          <label>PROJEKTNAME</label>
+          <input type="text" placeholder="z.B. Website-Relaunch">
+        </div>
+        <div class="form-group">
+          <label>BESCHREIBUNG</label>
+          <textarea rows="3" placeholder="Kurze Beschreibung..."></textarea>
+        </div>
+        <div style="display:flex; gap:0.75rem;">
+          <button class="btn-primary">ANLEGEN</button>
+          <button class="btn-secondary">ABBRECHEN</button>
+        </div>
+      </div>
+
+      <div class="project-grid">
+        <div class="project-card">
+          <h3>Website-Relaunch</h3>
+          <p>Neue Firmenwebsite mit CMS und Blog</p>
+          <div class="project-meta">
+            <span class="task-count">12 Tasks</span>
+            <span class="badge badge-active">Aktiv</span>
+          </div>
+        </div>
+        <div class="project-card">
+          <h3>Mobile App</h3>
+          <p>iOS &amp; Android App für Kundenbindung</p>
+          <div class="project-meta">
+            <span class="task-count">8 Tasks</span>
+            <span class="badge badge-planning">Planung</span>
+          </div>
+        </div>
+        <div class="project-card">
+          <h3>API-Migration</h3>
+          <p>Umstellung auf REST API v2</p>
+          <div class="project-meta">
+            <span class="task-count">5 Tasks</span>
+            <span class="badge badge-done">Abgeschlossen</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== ANSICHT 3: PROJEKTDETAIL ===== -->
+    <section id="view-detail" hidden>
+      <button class="back-btn">← ZURÜCK</button>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem;">
+        <div>
+          <div class="page-title">Website-Relaunch</div>
+          <div class="page-sub">Neue Firmenwebsite mit CMS und Blog</div>
+        </div>
+        <span class="badge badge-active">Aktiv</span>
+      </div>
+
+      <h3 style="font-size:0.85rem; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; margin-bottom:0.75rem;">Tasks</h3>
+
+      <form onsubmit="return false" style="display:flex; gap:0.6rem; margin-bottom:1rem;">
+        <input type="text" placeholder="Neuen Task eingeben..." style="flex:1;">
+        <button class="btn-primary">+ HINZUFÜGEN</button>
+      </form>
+
+      <ul class="task-list">
+        <li class="task-item">
+          <span>Design-Mockups erstellen</span>
+          <span class="badge badge-done">done</span>
+        </li>
+        <li class="task-item">
+          <span>Startseite entwickeln</span>
+          <span class="badge badge-in_progress">in_progress</span>
+        </li>
+        <li class="task-item">
+          <span>CMS integrieren</span>
+          <span class="badge badge-review">review</span>
+        </li>
+        <li class="task-item">
+          <span>Kontaktformular bauen</span>
+          <span class="badge badge-todo">todo</span>
+        </li>
+        <li class="task-item">
+          <span>SEO-Optimierung</span>
+          <span class="badge badge-todo">todo</span>
+        </li>
+      </ul>
+    </section>
+
+  </main>
+
+  <nav class="dummy-nav">
+    <button onclick="showView('auth')" id="nav-auth">Login</button>
+    <button onclick="showView('dashboard')" id="nav-dashboard" class="active">Dashboard</button>
+    <button onclick="showView('detail')" id="nav-detail">Detail</button>
+    <button onclick="document.getElementById('new-project-form').hidden = !document.getElementById('new-project-form').hidden; showView('dashboard')">Formular</button>
+    <a href="index.html" style="padding:0.5rem 1rem; color:#64748b; text-decoration:none; font-size:0.78rem;">← Übersicht</a>
+  </nav>
+
+  <script>
+    function showView(view) {
+      document.getElementById('view-auth').hidden = view !== 'auth';
+      document.getElementById('view-dashboard').hidden = view !== 'dashboard';
+      document.getElementById('view-detail').hidden = view !== 'detail';
+      document.getElementById('topbar').hidden = view === 'auth';
+      document.querySelectorAll('.dummy-nav button').forEach(b => b.classList.remove('active'));
+      const map = { auth: 'nav-auth', dashboard: 'nav-dashboard', detail: 'nav-detail' };
+      if (map[view]) document.getElementById(map[view]).classList.add('active');
+    }
+    showView('dashboard');
+  </script>
+</body>
+</html>
