@@ -20,9 +20,11 @@ function setUser(user) {
   $('#admin-btn').hidden = user.role !== 'admin';
 }
 
-function show(view) {
-  for (const v of ['auth', 'dashboard', 'detail', 'profile', 'admin']) {
-    $(`#${v}-view`).hidden = v !== view;
+const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view'];
+
+function show(viewId) {
+  for (const id of VIEWS) {
+    $(`#${id}`).hidden = id !== viewId;
   }
 }
 
@@ -32,7 +34,7 @@ async function init() {
     setUser(user);
     await loadDashboard();
   } catch {
-    show('auth');
+    show('auth-view');
   }
 }
 
@@ -46,7 +48,7 @@ async function loadDashboard() {
     li.onclick = () => loadProject(p.id);
     list.appendChild(li);
   }
-  show('dashboard');
+  show('dashboard-view');
 }
 
 async function loadProject(id) {
@@ -71,7 +73,7 @@ async function loadProject(id) {
     li.appendChild(select);
     list.appendChild(li);
   }
-  show('detail');
+  show('project-detail-view');
 }
 
 async function loadProfile() {
@@ -82,7 +84,7 @@ async function loadProfile() {
   form.currentPassword.value = '';
   form.newPassword.value = '';
   $('#profile-msg').textContent = '';
-  show('profile');
+  show('profile-view');
 }
 
 async function loadAdmin() {
@@ -114,7 +116,7 @@ async function loadAdmin() {
     };
     tbody.appendChild(tr);
   }
-  show('admin');
+  show('admin-view');
 }
 
 function editUser(u) {
@@ -129,111 +131,132 @@ function editUser(u) {
   form.hidden = false;
 }
 
-$('#login-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  try {
-    const { user } = await api('/api/auth/login', { method: 'POST', body: Object.fromEntries(fd) });
-    setUser(user);
-    $('#auth-error').hidden = true;
-    await loadDashboard();
-  } catch (err) {
-    $('#auth-error').textContent = err.message;
-    $('#auth-error').hidden = false;
+function bind(id, handler) {
+  const el = $(id);
+  if (!el) {
+    console.error(`Element nicht gefunden: ${id}`);
+    return;
   }
-};
+  el.onclick = handler;
+}
 
-$('#register-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  try {
-    const { user } = await api('/api/auth/register', { method: 'POST', body: Object.fromEntries(fd) });
-    setUser(user);
-    $('#auth-error').hidden = true;
-    await loadDashboard();
-  } catch (err) {
-    $('#auth-error').textContent = err.message;
-    $('#auth-error').hidden = false;
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'login-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      const { user } = await api('/api/auth/login', { method: 'POST', body: Object.fromEntries(fd) });
+      setUser(user);
+      $('#auth-error').hidden = true;
+      await loadDashboard();
+    } catch (err) {
+      $('#auth-error').textContent = err.message;
+      $('#auth-error').hidden = false;
+    }
   }
-};
+});
 
-$('#logout-btn').onclick = async () => {
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'register-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      const { user } = await api('/api/auth/register', { method: 'POST', body: Object.fromEntries(fd) });
+      setUser(user);
+      $('#auth-error').hidden = true;
+      await loadDashboard();
+    } catch (err) {
+      $('#auth-error').textContent = err.message;
+      $('#auth-error').hidden = false;
+    }
+  }
+});
+
+bind('#logout-btn', async () => {
   await api('/api/auth/logout', { method: 'POST' });
   state.user = null;
   $('#user-box').hidden = true;
-  show('auth');
-};
+  show('auth-view');
+});
 
-$('#profile-btn').onclick = () => loadProfile();
-$('#profile-back-btn').onclick = () => loadDashboard();
+bind('#profile-btn', () => loadProfile());
+bind('#profile-back-btn', () => loadDashboard());
 
-$('#profile-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  const body = Object.fromEntries(fd);
-  if (!body.currentPassword) delete body.currentPassword;
-  if (!body.newPassword) delete body.newPassword;
-  try {
-    const { user } = await api('/api/auth/profile', { method: 'PUT', body });
-    setUser(user);
-    $('#profile-msg').textContent = 'Profil gespeichert.';
-  } catch (err) {
-    $('#profile-msg').textContent = err.message;
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'profile-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd);
+    if (!body.currentPassword) delete body.currentPassword;
+    if (!body.newPassword) delete body.newPassword;
+    try {
+      const { user } = await api('/api/auth/profile', { method: 'PUT', body });
+      setUser(user);
+      $('#profile-msg').textContent = 'Profil gespeichert.';
+    } catch (err) {
+      $('#profile-msg').textContent = err.message;
+    }
   }
-};
+});
 
-$('#admin-btn').onclick = () => loadAdmin();
-$('#admin-back-btn').onclick = () => loadDashboard();
+bind('#admin-btn', () => loadAdmin());
+bind('#admin-back-btn', () => loadDashboard());
 
-$('#new-user-btn').onclick = () => {
+bind('#new-user-btn', () => {
   const form = $('#user-form');
   form.reset();
   form.id.value = '';
   form.password.required = true;
   form.hidden = false;
-};
-$('#cancel-user-btn').onclick = () => { $('#user-form').hidden = true; };
+});
+bind('#cancel-user-btn', () => { $('#user-form').hidden = true; });
 
-$('#user-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  const body = Object.fromEntries(fd);
-  body.is_active = fd.get('is_active') === 'on';
-  if (!body.password) delete body.password;
-  try {
-    if (body.id) {
-      delete body.id;
-      await api(`/api/admin/users/${e.target.id.value}`, { method: 'PUT', body });
-    } else {
-      await api('/api/admin/users', { method: 'POST', body });
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'user-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd);
+    body.is_active = fd.get('is_active') === 'on';
+    if (!body.password) delete body.password;
+    try {
+      if (body.id) {
+        delete body.id;
+        await api(`/api/admin/users/${e.target.id.value}`, { method: 'PUT', body });
+      } else {
+        await api('/api/admin/users', { method: 'POST', body });
+      }
+      $('#user-form').hidden = true;
+      await loadAdmin();
+    } catch (err) {
+      alert(err.message);
     }
-    $('#user-form').hidden = true;
-    await loadAdmin();
-  } catch (err) {
-    alert(err.message);
   }
-};
+});
 
-$('#new-project-btn').onclick = () => { $('#project-form').hidden = false; };
-$('#cancel-project-btn').onclick = () => { $('#project-form').hidden = true; };
+bind('#new-project-btn', () => { $('#project-form').hidden = false; });
+bind('#cancel-project-btn', () => { $('#project-form').hidden = true; });
 
-$('#project-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  await api('/api/projects', { method: 'POST', body: Object.fromEntries(fd) });
-  $('#project-form').hidden = true;
-  e.target.reset();
-  await loadDashboard();
-};
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'project-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    await api('/api/projects', { method: 'POST', body: Object.fromEntries(fd) });
+    $('#project-form').hidden = true;
+    e.target.reset();
+    await loadDashboard();
+  }
+});
 
-$('#task-form').onsubmit = async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  await api(`/api/projects/${state.currentProject.id}/tasks`, { method: 'POST', body: Object.fromEntries(fd) });
-  e.target.reset();
-  await loadProject(state.currentProject.id);
-};
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'task-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    await api(`/api/projects/${state.currentProject.id}/tasks`, { method: 'POST', body: Object.fromEntries(fd) });
+    e.target.reset();
+    await loadProject(state.currentProject.id);
+  }
+});
 
-$('#back-btn').onclick = () => loadDashboard();
+bind('#back-btn', () => loadDashboard());
 
 init();
