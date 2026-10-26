@@ -391,10 +391,11 @@ document.addEventListener('submit', async (e) => {
     const body = Object.fromEntries(fd);
     body.is_active = fd.get('is_active') === 'on';
     if (!body.password) delete body.password;
+    const userId = body.id;
+    delete body.id;
     try {
-      if (body.id) {
-        delete body.id;
-        await api(`/api/admin/users/${e.target.id.value}`, { method: 'PUT', body });
+      if (userId) {
+        await api(`/api/admin/users/${userId}`, { method: 'PUT', body });
       } else {
         await api('/api/admin/users', { method: 'POST', body });
       }
