@@ -61,7 +61,8 @@ App erreichbar unter: http://localhost:3000
 | GET | `/api/admin/roles` | Verfügbare Rollen |
 | GET | `/api/projects` | Projekte des Benutzers |
 | POST | `/api/projects` | Projekt anlegen |
-| GET | `/api/projects/:id` | Projekt inkl. Tasks |
+| GET | `/api/projects/:id` | Projekt inkl. Tasks (Filter: `?type=&status=&label=&epic_only=true`) |
+| GET | `/api/projects/:id/dashboard` | KPIs, Burndown, Aktivität, Fälligkeiten |
 | PUT | `/api/projects/:id` | Projekt aktualisieren |
 | DELETE | `/api/projects/:id` | Projekt löschen |
 | POST | `/api/projects/:id/tasks` | Task anlegen |
@@ -102,6 +103,19 @@ Neben der globalen Rolle gibt es **projektbezogene Rollen** (`project_members`):
 | **Beobachter** | Nur Lesen (Tasks werden als Badges statt Dropdown angezeigt) |
 
 Der **globale Admin** hat in jedem Projekt alle Rechte. Der Projekt-Owner ist implizit Projektmanager und kann nicht entfernt werden. Mitglieder werden in der Projekt-Detailansicht verwaltet.
+
+## Ansichten & Filter (Epic 4)
+
+In der Projekt-Detailansicht gibt es vier Tabs:
+
+| Tab | Inhalt |
+|---|---|
+| **Dashboard** (US-11) | KPIs (offen/erledigt/in Arbeit/überfällig/Epics/Bugs), Burndown-Chart (14 Tage), Verteilung nach Status & Typ, letzte Aktivität, anstehende Fälligkeiten |
+| **Liste** (US-14, US-15) | Alle Issues mit Typ-Badge, Labels, Fälligkeitsdatum; Filter-Bar: Typ, Status, Label, „Nur Epics" |
+| **Board** (US-13) | Kanban-Board mit 4 Status-Spalten (To Do / In Progress / Review / Done); Drag & Drop zum Statuswechsel (ab Entwickler) |
+| **Timeline** (US-12) | Gantt-ähnliche Zeitleiste: Balken von Erstellung bis Fälligkeitsdatum, farbcodiert nach Status; Issues ohne Datum als Liste darunter |
+
+Issues haben einen **Typ** (`epic`, `user_story`, `task`, `bug`), **Labels** (kommagetrennt) und ein optionales **Fälligkeitsdatum**. Epics können über `epic_id` gruppiert werden.
 
 ## GitLab-Integration (Epic 3)
 
