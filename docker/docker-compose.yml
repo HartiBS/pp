@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pp_user
+      POSTGRES_PASSWORD: pp_password
+      POSTGRES_DB: pp_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    build: ..
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgres://pp_user:pp_password@db:5432/pp_db
+      SESSION_SECRET: dev-secret-change-me
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    volumes:
+      - ../src:/app/src
+      - ../public:/app/public
+
+volumes:
+  pgdata:
