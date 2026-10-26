@@ -28,7 +28,13 @@ app.use(session({
 
 app.use(loadUser);
 
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  etag: false,
+  lastModified: false,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-store');
+  },
+}));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);

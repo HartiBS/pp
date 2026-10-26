@@ -55,7 +55,12 @@ const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-vi
 
 function show(viewId) {
   for (const id of VIEWS) {
-    $(`#${id}`).hidden = id !== viewId;
+    const el = $(`#${id}`);
+    if (!el) {
+      console.error(`View-Element nicht gefunden: #${id}`);
+      continue;
+    }
+    el.hidden = id !== viewId;
   }
 }
 
