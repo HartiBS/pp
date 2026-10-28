@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const { version } = require('../../package.json');
 
 async function getSettings() {
   const { rows } = await db.query(
@@ -36,6 +37,8 @@ async function gitlabRequest(path, { method = 'GET', body } = {}) {
   const headers = {
     'PRIVATE-TOKEN': settings.access_token,
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
+    'User-Agent': process.env.GITLAB_USER_AGENT || `pp-project-management/${version}`,
   };
   if (settings.service_account_username) {
     headers['X-GitLab-Username'] = settings.service_account_username;
@@ -49,6 +52,16 @@ async function gitlabRequest(path, { method = 'GET', body } = {}) {
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      const err = new Error(
+        `GitLab API Fehler (${res.status}): HTML-Antwort statt JSON – vermutlich blockiert ein Bot-Schutz ` +
+        `(z. B. Cloudflare "Just a moment...") die Anfrage. User-Agent (GITLAB_USER_AGENT) und IP-Freigaben ` +
+        `in der GitLab-/Cloudflare-Konfiguration prüfen.`
+      );
+      err.status = 502;
+      throw err;
+    }
     const err = new Error(`GitLab API Fehler (${res.status}): ${text.slice(0, 200)}`);
     err.status = 502;
     throw err;
