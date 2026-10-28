@@ -161,6 +161,7 @@ Rechte: Erstellen/Bearbeiten/Kommentieren erfordert mindestens die projektbezoge
 - Session-Cookie: `httpOnly`, `sameSite: lax`
 - Passwörter: bcrypt (Cost 10)
 - GitLab-Token: nur serverseitig in der DB, nie an das Frontend ausgeliefert
+- GitLab-Synchronisation: Beim Öffnen eines verknüpften Projekts werden GitLab-Issues automatisch synchronisiert (#56). Beim Anlegen eines Tasks kann „Auch in GitLab anlegen" gewählt werden; Änderungen an verknüpften Tasks (Titel, Beschreibung, Status `done` → GitLab `closed`) werden automatisch nach GitLab gepusht (#57). Fehler beim Push werden geloggt, blockieren aber nicht die lokale Speicherung.
 - SQL: ausschließlich parametrisierte Queries
 
 ## Projektstruktur
