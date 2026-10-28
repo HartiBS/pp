@@ -7,11 +7,20 @@ async function getSettings() {
   return rows[0] || null;
 }
 
+// Entfernt abschließende Slashes aus einer URL – ohne Regex, da die URL
+// user-kontrolliert ist und ein Muster wie /\/+$/ von CodeQL als
+// potenzielles ReDoS-Risiko (polynomial regular expression) gemeldet wird.
+function stripTrailingSlashes(url) {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47 /* '/' */) end--;
+  return url.slice(0, end);
+}
+
 async function saveSettings(baseUrl, accessToken, userId, serviceAccountUsername) {
   const { rows } = await db.query(
     `INSERT INTO gitlab_settings (base_url, access_token, updated_by, service_account_username)
      VALUES ($1, $2, $3, $4) RETURNING id, base_url`,
-    [baseUrl.replace(/\/+$/, ''), accessToken, userId, serviceAccountUsername || null]
+    [stripTrailingSlashes(baseUrl), accessToken, userId, serviceAccountUsername || null]
   );
   return rows[0];
 }
