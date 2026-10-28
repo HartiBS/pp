@@ -148,7 +148,7 @@ Issues haben einen **Typ** (`epic`, `user_story`, `task`, `bug`), **Labels** (ko
 
 Die App kann Issues direkt mit einer GitLab-Instanz synchronisieren:
 
-1. **Admin** hinterlegt in der Benutzerverwaltung unter „GitLab-Verbindung" die GitLab-URL und ein Access Token (Personal/Project/Group Token mit `api`-Scope)
+1. **Admin** hinterlegt in der Benutzerverwaltung unter „GitLab-Verbindung" die GitLab-URL und den Access Token eines **Service-Accounts** (Bot-User mit `api`-Scope). Optional kann der Service-Account-Benutzername angegeben werden — dann sendet die App zusätzlich den Header `X-GitLab-Username` (Impersonation, falls auf dem Token aktiviert). „Verbindung testen" zeigt an, als welcher GitLab-User die Verbindung besteht.
 2. In der **Projekt-Detailansicht** wird die GitLab-Projekt-ID verknüpft (nur Projektmanager/Admin)
 3. Über **„Synchronisieren"** werden alle Issues des GitLab-Projekts geladen und lokal gespiegelt (`gitlab_issues`)
 4. Neue Issues können direkt aus der App in GitLab angelegt werden; bestehende lassen sich **bearbeiten, kommentieren, schließen und wiedereröffnen**

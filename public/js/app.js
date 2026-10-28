@@ -682,8 +682,9 @@ async function loadGitLabSettings() {
     const s = await api('/api/gitlab/settings');
     $('#gitlab-settings-form').base_url.value = s.base_url || '';
     $('#gitlab-settings-form').access_token.value = '';
+    $('#gitlab-sa-username').value = s.service_account_username || '';
     $('#gitlab-settings-msg').textContent = s.configured
-      ? `Konfiguriert: ${s.base_url} (Token gesetzt)`
+      ? `Konfiguriert: ${s.base_url} (Token gesetzt${s.service_account_username ? ', Service-Account: @' + s.service_account_username : ''})`
       : 'Noch nicht konfiguriert.';
   } catch (err) {
     $('#gitlab-settings-msg').textContent = err.message;
@@ -1004,8 +1005,8 @@ bind('#test-gitlab-btn', async () => {
   try {
     const fd = new FormData($('#gitlab-settings-form'));
     await api('/api/gitlab/settings', { method: 'PUT', body: Object.fromEntries(fd) });
-    const { ok } = await api('/api/gitlab/settings/test', { method: 'POST' });
-    if (ok) msg.textContent = 'Verbindung erfolgreich! ✅';
+    const { ok, user } = await api('/api/gitlab/settings/test', { method: 'POST' });
+    if (ok) msg.textContent = `Verbindung erfolgreich! ✅ Angemeldet als: @${user.username} (${user.name})`;
   } catch (err) {
     msg.textContent = `Fehler: ${err.message}`;
   }
@@ -1072,8 +1073,10 @@ document.addEventListener('submit', async (e) => {
   if (e.target.id === 'gitlab-settings-form') {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const body = Object.fromEntries(fd);
+    if (!body.service_account_username) delete body.service_account_username;
     try {
-      await api('/api/gitlab/settings', { method: 'PUT', body: Object.fromEntries(fd) });
+      await api('/api/gitlab/settings', { method: 'PUT', body });
       $('#gitlab-settings-msg').textContent = 'GitLab-Einstellungen gespeichert.';
       e.target.access_token.value = '';
     } catch (err) {

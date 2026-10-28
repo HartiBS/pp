@@ -16,6 +16,7 @@ router.get('/settings', requireRole('admin'), async (req, res) => {
       configured: !!settings,
       base_url: settings ? settings.base_url : (process.env.GITLAB_URL || ''),
       has_token: !!settings,
+      service_account_username: settings ? settings.service_account_username : null,
     });
   } catch (err) {
     console.error(err);
@@ -24,9 +25,12 @@ router.get('/settings', requireRole('admin'), async (req, res) => {
 });
 
 router.put('/settings', requireRole('admin'), async (req, res) => {
-  const { base_url, access_token } = req.body;
+  const { base_url, access_token, service_account_username } = req.body;
   if (!base_url || !access_token) {
     return res.status(400).json({ error: 'base_url und access_token sind erforderlich' });
+  }
+  if (service_account_username && !/^[a-zA-Z0-9_.\-]{1,255}$/.test(service_account_username)) {
+    return res.status(400).json({ error: 'Ungültiger Service-Account-Benutzername' });
   }
   try {
     new URL(base_url);
@@ -34,7 +38,7 @@ router.put('/settings', requireRole('admin'), async (req, res) => {
     return res.status(400).json({ error: 'Ungültige GitLab-URL' });
   }
   try {
-    const saved = await gitlab.saveSettings(base_url, access_token, req.session.userId);
+    const saved = await gitlab.saveSettings(base_url, access_token, req.session.userId, service_account_username);
     res.json({ ok: true, id: saved.id, base_url: saved.base_url });
   } catch (err) {
     console.error(err);
@@ -44,8 +48,8 @@ router.put('/settings', requireRole('admin'), async (req, res) => {
 
 router.post('/settings/test', requireRole('admin'), async (req, res) => {
   try {
-    await gitlab.gitlabRequest('/user');
-    res.json({ ok: true });
+    const user = await gitlab.gitlabRequest('/user');
+    res.json({ ok: true, user: { id: user.id, username: user.username, name: user.name } });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
   }

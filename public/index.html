@@ -135,7 +135,10 @@
       <h2 style="margin-top:2rem;">GitLab-Verbindung</h2>
       <form id="gitlab-settings-form">
         <label>GitLab-URL <input type="url" name="base_url" placeholder="https://gitlab.example.com" required></label>
-        <label>Access Token (Personal/Project/Group) <input type="password" name="access_token" required></label>
+        <label>Service-Account Access Token <input type="password" name="access_token" required></label>
+        <label>Service-Account Benutzername (optional, für Impersonation)
+          <input type="text" name="service_account_username" id="gitlab-sa-username" placeholder="z. B. pp-serviceaccount">
+        </label>
         <div style="display:flex; gap:0.75rem;">
           <button type="submit">Speichern</button>
           <button type="button" id="test-gitlab-btn" class="btn-secondary">Verbindung testen</button>

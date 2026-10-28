@@ -1,15 +1,17 @@
 const db = require('../config/database');
 
 async function getSettings() {
-  const { rows } = await db.query('SELECT id, base_url, access_token FROM gitlab_settings ORDER BY id DESC LIMIT 1');
+  const { rows } = await db.query(
+    'SELECT id, base_url, access_token, service_account_username FROM gitlab_settings ORDER BY id DESC LIMIT 1'
+  );
   return rows[0] || null;
 }
 
-async function saveSettings(baseUrl, accessToken, userId) {
+async function saveSettings(baseUrl, accessToken, userId, serviceAccountUsername) {
   const { rows } = await db.query(
-    `INSERT INTO gitlab_settings (base_url, access_token, updated_by)
-     VALUES ($1, $2, $3) RETURNING id, base_url`,
-    [baseUrl.replace(/\/+$/, ''), accessToken, userId]
+    `INSERT INTO gitlab_settings (base_url, access_token, updated_by, service_account_username)
+     VALUES ($1, $2, $3, $4) RETURNING id, base_url`,
+    [baseUrl.replace(/\/+$/, ''), accessToken, userId, serviceAccountUsername || null]
   );
   return rows[0];
 }
@@ -22,12 +24,17 @@ async function gitlabRequest(path, { method = 'GET', body } = {}) {
     throw err;
   }
 
+  const headers = {
+    'PRIVATE-TOKEN': settings.access_token,
+    'Content-Type': 'application/json',
+  };
+  if (settings.service_account_username) {
+    headers['X-GitLab-Username'] = settings.service_account_username;
+  }
+
   const res = await fetch(`${settings.base_url}/api/v4${path}`, {
     method,
-    headers: {
-      'PRIVATE-TOKEN': settings.access_token,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
 
