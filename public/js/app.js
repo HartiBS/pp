@@ -99,6 +99,266 @@ const PROJECT_ROLE_LABELS = {
 const canEdit = (role) => role === 'admin' || role === 'projektmanager' || role === 'entwickler';
 const canManageMembers = (role) => role === 'admin' || role === 'projektmanager';
 
+const ISSUE_TYPE_LABELS = { epic: 'Epic', user_story: 'User Story', task: 'Task', bug: 'Bug' };
+
+function currentFilters() {
+  return {
+    type: $('#filter-type').value,
+    status: $('#filter-status').value,
+    label: $('#filter-label').value.trim(),
+    epic_only: $('#filter-epic-only').checked,
+  };
+}
+
+function taskMatchesFilter(t, f) {
+  if (f.epic_only && t.issue_type !== 'epic') return false;
+  if (f.type && t.issue_type !== f.type) return false;
+  if (f.status && t.status !== f.status) return false;
+  if (f.label && !(t.labels || []).includes(f.label)) return false;
+  return true;
+}
+
+function renderTaskList(tasks, readonly, projectId) {
+  const list = $('#task-list');
+  list.innerHTML = '';
+  if (!tasks.length) {
+    list.innerHTML = '<li><small style="color:var(--text-muted);">Keine Issues gefunden.</small></li>';
+    return;
+  }
+  for (const t of tasks) {
+    const li = document.createElement('li');
+    const labelsHtml = (t.labels || []).map(l => `<span class="badge badge-todo" style="margin-right:0.25rem;">${l}</span>`).join('');
+    const dueHtml = t.due_date ? ` <small>📅 ${t.due_date}</small>` : '';
+    const typeBadge = `<span class="badge">${ISSUE_TYPE_LABELS[t.issue_type] || t.issue_type}</span>`;
+    li.innerHTML = `<span>${typeBadge} ${t.title}${t.assignee_name ? ` <small>(${t.assignee_name})</small>` : ''}${dueHtml}<br>${labelsHtml}</span>`;
+    if (!readonly) {
+      const select = document.createElement('select');
+      for (const s of ['todo', 'in_progress', 'review', 'done']) {
+        const opt = document.createElement('option');
+        opt.value = s; opt.textContent = s;
+        if (t.status === s) opt.selected = true;
+        select.appendChild(opt);
+      }
+      select.onchange = async () => {
+        await api(`/api/projects/${projectId}/tasks/${t.id}`, { method: 'PUT', body: { status: select.value } });
+        await loadProject(projectId);
+      };
+      li.appendChild(select);
+    } else {
+      const badge = document.createElement('span');
+      badge.className = `badge ${badgeClass(t.status)}`;
+      badge.textContent = t.status;
+      li.appendChild(badge);
+    }
+    list.appendChild(li);
+  }
+}
+
+function renderBoard(tasks, readonly, projectId) {
+  for (const status of ['todo', 'in_progress', 'review', 'done']) {
+    const col = $(`#col-${status}`);
+    col.innerHTML = '';
+    $('#count-' + status).textContent = '0';
+  }
+  const visible = tasks;
+  for (const t of visible) {
+    const col = $(`#col-${t.status}`);
+    if (!col) continue;
+    $('#count-' + t.status).textContent = String(Number($('#count-' + t.status).textContent) + 1);
+    const card = document.createElement('div');
+    card.className = 'board-card';
+    card.draggable = !readonly;
+    const labelsHtml = (t.labels || []).map(l => `<span class="badge badge-todo">${l}</span>`).join(' ');
+    card.innerHTML = `<span class="badge">${ISSUE_TYPE_LABELS[t.issue_type] || t.issue_type}</span> ${t.title}<br>
+      <small>${t.assignee_name || ''}${t.due_date ? ' · 📅 ' + t.due_date : ''}</small>${labelsHtml ? '<br>' + labelsHtml : ''}`;
+    if (!readonly) {
+      card.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', String(t.id));
+        card.classList.add('dragging');
+      });
+      card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    }
+    col.appendChild(card);
+  }
+}
+
+function renderTimeline(tasks) {
+  const track = $('#timeline-track');
+  track.innerHTML = '';
+  const dated = tasks.filter(t => t.due_date);
+  const undated = tasks.filter(t => !t.due_date);
+  if (!dated.length && !undated.length) {
+    track.innerHTML = '<p style="color:var(--text-muted);">Keine Issues für die Timeline vorhanden.</p>';
+    return;
+  }
+  if (dated.length) {
+    const min = new Date(Math.min(...dated.map(t => new Date(t.due_date))));
+    const max = new Date(Math.max(...dated.map(t => new Date(t.due_date))));
+    const today = new Date(); today.setHours(0,0,0,0);
+    const start = new Date(Math.min(min, today));
+    const end = new Date(Math.max(max, today));
+    end.setDate(end.getDate() + 1);
+    const totalDays = Math.max(1, Math.round((end - start) / 86400000));
+
+    const header = document.createElement('div');
+    header.className = 'timeline-header';
+    for (let i = 0; i <= totalDays; i += Math.max(1, Math.floor(totalDays / 10))) {
+      const d = new Date(start); d.setDate(d.getDate() + i);
+      const cell = document.createElement('div');
+      cell.className = 'timeline-date-cell';
+      cell.textContent = d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+      header.appendChild(cell);
+    }
+    track.appendChild(header);
+
+    const pos = (dateStr) => {
+      const d = new Date(dateStr);
+      return Math.min(100, Math.max(0, ((d - start) / 86400000 / totalDays) * 100));
+    };
+
+    for (const t of dated) {
+      const row = document.createElement('div');
+      row.className = 'timeline-row';
+      const bar = document.createElement('div');
+      bar.className = `timeline-bar ${badgeClass(t.status)}`;
+      const left = pos(t.created_at ? t.created_at.slice(0, 10) : t.due_date);
+      const width = Math.max(2, pos(t.due_date) - left);
+      bar.style.left = left + '%';
+      bar.style.width = width + '%';
+      bar.title = `${t.title} (fällig: ${t.due_date})`;
+      const label = document.createElement('span');
+      label.className = 'timeline-label';
+      label.textContent = `${ISSUE_TYPE_LABELS[t.issue_type] || ''} ${t.title}`;
+      row.appendChild(label);
+      row.appendChild(bar);
+      track.appendChild(row);
+    }
+  }
+  if (undated.length) {
+    const section = document.createElement('div');
+    section.style.marginTop = '1rem';
+    section.innerHTML = '<h4>Ohne Fälligkeitsdatum</h4>';
+    const ul = document.createElement('ul');
+    ul.className = 'dash-list';
+    for (const t of undated) {
+      const li = document.createElement('li');
+      li.innerHTML = `<span><span class="badge">${ISSUE_TYPE_LABELS[t.issue_type] || t.issue_type}</span> ${t.title}</span><span class="badge ${badgeClass(t.status)}">${t.status}</span>`;
+      ul.appendChild(li);
+    }
+    section.appendChild(ul);
+    track.appendChild(section);
+  }
+}
+
+function renderDashboard(data) {
+  const k = data.kpis;
+  $('#kpi-open').textContent = k.open_tasks;
+  $('#kpi-done').textContent = k.done_tasks;
+  $('#kpi-progress').textContent = k.in_progress;
+  $('#kpi-overdue').textContent = k.overdue;
+  $('#kpi-epics').textContent = k.epics;
+  $('#kpi-bugs').textContent = k.bugs;
+
+  renderSimpleBars('#dash-status-list', data.byStatus, 'status');
+  renderSimpleBars('#dash-type-list', data.byType, 'issue_type', ISSUE_TYPE_LABELS);
+
+  const actList = $('#dash-activity-list');
+  actList.innerHTML = '';
+  for (const a of data.activity) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${a.title}</span><small>${a.actor || ''} · ${new Date(a.updated_at).toLocaleString('de-DE')}</small>`;
+    actList.appendChild(li);
+  }
+
+  const upList = $('#dash-upcoming-list');
+  upList.innerHTML = '';
+  if (!data.upcoming.length) {
+    upList.innerHTML = '<li><small style="color:var(--text-muted);">Keine Fälligkeiten.</small></li>';
+  }
+  for (const u of data.upcoming) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${u.title}</span><small>📅 ${u.due_date}</small>`;
+    upList.appendChild(li);
+  }
+
+  drawBurndown(data.burndown);
+}
+
+function renderSimpleBars(selector, rows, keyField, labelMap) {
+  const list = $(selector);
+  list.innerHTML = '';
+  if (!rows.length) {
+    list.innerHTML = '<li><small style="color:var(--text-muted);">Keine Daten.</small></li>';
+    return;
+  }
+  const max = Math.max(...rows.map(r => r.count));
+  for (const r of rows) {
+    const li = document.createElement('li');
+    const label = labelMap ? (labelMap[r[keyField]] || r[keyField]) : r[keyField];
+    const pct = max ? Math.round((r.count / max) * 100) : 0;
+    li.innerHTML = `<span>${label} (${r.count})</span><div class="dash-bar"><div style="width:${pct}%;"></div></div>`;
+    list.appendChild(li);
+  }
+}
+
+function drawBurndown(rows) {
+  const svg = $('#burndown-chart');
+  svg.innerHTML = '';
+  if (!rows || rows.length < 2) {
+    svg.innerHTML = '<text x="20" y="100" fill="var(--text-muted)" font-size="13">Zu wenig Daten für Burndown.</text>';
+    return;
+  }
+  const W = 560, H = 200, padL = 40, padB = 24, padT = 12, padR = 10;
+  const maxVal = Math.max(...rows.map(r => r.open), 1);
+  const stepX = (W - padL - padR) / (rows.length - 1);
+  const points = rows.map((r, i) => {
+    const x = padL + i * stepX;
+    const y = padT + (H - padT - padB) * (1 - r.open / maxVal);
+    return [x, y];
+  });
+  const line = points.map((p, i) => (i === 0 ? 'M' : 'L') + p[0] + ',' + p[1]).join(' ');
+  const ns = 'http://www.w3.org/2000/svg';
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', line);
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'var(--accent-light)');
+  path.setAttribute('stroke-width', '2');
+  svg.appendChild(path);
+  for (const [x, y] of points) {
+    const c = document.createElementNS(ns, 'circle');
+    c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', 3);
+    c.setAttribute('fill', 'var(--accent-light)');
+    svg.appendChild(c);
+  }
+  const firstDate = new Date(rows[0].date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  const lastDate = new Date(rows[rows.length - 1].date).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+  const t1 = document.createElementNS(ns, 'text');
+  t1.setAttribute('x', padL); t1.setAttribute('y', H - 6); t1.setAttribute('fill', 'var(--text-muted)'); t1.setAttribute('font-size', '11');
+  t1.textContent = firstDate;
+  svg.appendChild(t1);
+  const t2 = document.createElementNS(ns, 'text');
+  t2.setAttribute('x', W - padR - 30); t2.setAttribute('y', H - 6); t2.setAttribute('fill', 'var(--text-muted)'); t2.setAttribute('font-size', '11');
+  t2.textContent = lastDate;
+  svg.appendChild(t2);
+  const t3 = document.createElementNS(ns, 'text');
+  t3.setAttribute('x', 4); t3.setAttribute('y', padT + 4); t3.setAttribute('fill', 'var(--text-muted)'); t3.setAttribute('font-size', '11');
+  t3.textContent = maxVal;
+  svg.appendChild(t3);
+}
+
+function setProjectTab(tab) {
+  state.projectTab = tab;
+  for (const [name, btnId, viewId] of [
+    ['dashboard', 'tab-dashboard-btn', 'proj-dashboard-view'],
+    ['list', 'tab-list-btn', 'proj-list-view'],
+    ['board', 'tab-board-btn', 'proj-board-view'],
+    ['timeline', 'tab-timeline-btn', 'proj-timeline-view'],
+  ]) {
+    $(`#${btnId}`).classList.toggle('active', name === tab);
+    $(`#${viewId}`).hidden = name !== tab;
+  }
+}
+
 function renderMembers(members, project, myRole) {
   const list = $('#member-list');
   list.innerHTML = '';
@@ -152,30 +412,36 @@ async function loadProject(id) {
   $('#new-gitlab-issue-btn').hidden = readonly || !project.gitlab_project_id;
   loadGitLabIssues(id);
 
-  const list = $('#task-list');
-  list.innerHTML = '';
-  for (const t of tasks) {
-    const li = document.createElement('li');
-    li.innerHTML = `<span>${t.title}${t.assignee_name ? ` <small>(${t.assignee_name})</small>` : ''}</span>`;
-    if (!readonly) {
-      const select = document.createElement('select');
-      for (const s of ['todo', 'in_progress', 'review', 'done']) {
-        const opt = document.createElement('option');
-        opt.value = s; opt.textContent = s;
-        if (t.status === s) opt.selected = true;
-        select.appendChild(opt);
-      }
-      select.onchange = () => api(`/api/projects/${id}/tasks/${t.id}`, { method: 'PUT', body: { status: select.value } });
-      li.appendChild(select);
-    } else {
-      const badge = document.createElement('span');
-      badge.className = `badge ${badgeClass(t.status)}`;
-      badge.textContent = t.status;
-      li.appendChild(badge);
-    }
-    list.appendChild(li);
+  state.allTasks = tasks;
+  renderCurrentProjectView(readonly, id);
+  if (state.projectTab === 'dashboard') {
+    loadProjectDashboard(id);
   }
   show('project-detail-view');
+}
+
+function renderCurrentProjectView(readonly, projectId) {
+  const tasks = state.allTasks || [];
+  const f = currentFilters();
+  const filtered = tasks.filter(t => taskMatchesFilter(t, f));
+  $('#filter-bar').hidden = state.projectTab === 'dashboard';
+
+  if (state.projectTab === 'list') {
+    renderTaskList(filtered, readonly, projectId);
+  } else if (state.projectTab === 'board') {
+    renderBoard(filtered, readonly, projectId);
+  } else if (state.projectTab === 'timeline') {
+    renderTimeline(filtered);
+  }
+}
+
+async function loadProjectDashboard(projectId) {
+  try {
+    const data = await api(`/api/projects/${projectId}/dashboard`);
+    renderDashboard(data);
+  } catch (err) {
+    console.error('Dashboard konnte nicht geladen werden:', err.message);
+  }
 }
 
 function renderGitLabIssues(issues) {
@@ -430,13 +696,56 @@ document.addEventListener('submit', async (e) => {
   if (e.target.id === 'task-form') {
     e.preventDefault();
     const fd = new FormData(e.target);
-    await api(`/api/projects/${state.currentProject.id}/tasks`, { method: 'POST', body: Object.fromEntries(fd) });
+    const labels = (fd.get('labels') || '').split(',').map(s => s.trim()).filter(Boolean);
+    const body = {
+      title: fd.get('title'),
+      issue_type: fd.get('issue_type') || 'task',
+      labels,
+      due_date: fd.get('due_date') || null,
+    };
+    await api(`/api/projects/${state.currentProject.id}/tasks`, { method: 'POST', body });
     e.target.reset();
     await loadProject(state.currentProject.id);
   }
 });
 
 bind('#back-btn', () => loadDashboard());
+
+bind('#tab-dashboard-btn', () => { setProjectTab('dashboard'); loadProjectDashboard(state.currentProject.id); });
+bind('#tab-list-btn', () => { setProjectTab('list'); renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id); });
+bind('#tab-board-btn', () => { setProjectTab('board'); renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id); });
+bind('#tab-timeline-btn', () => { setProjectTab('timeline'); renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id); });
+
+for (const el of ['#filter-type', '#filter-status', '#filter-label', '#filter-epic-only']) {
+  const node = $(el);
+  if (node) node.addEventListener('change', () => renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id));
+}
+bind('#filter-reset-btn', () => {
+  $('#filter-type').value = '';
+  $('#filter-status').value = '';
+  $('#filter-label').value = '';
+  $('#filter-epic-only').checked = false;
+  renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id);
+});
+
+for (const status of ['todo', 'in_progress', 'review', 'done']) {
+  const col = $(`#col-${status}`);
+  if (!col) continue;
+  col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drag-over'); });
+  col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
+  col.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    col.classList.remove('drag-over');
+    const taskId = e.dataTransfer.getData('text/plain');
+    if (!taskId || !state.currentProject) return;
+    try {
+      await api(`/api/projects/${state.currentProject.id}/tasks/${taskId}`, { method: 'PUT', body: { status } });
+      await loadProject(state.currentProject.id);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+}
 
 bind('#test-gitlab-btn', async () => {
   const msg = $('#gitlab-settings-msg');

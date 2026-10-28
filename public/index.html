@@ -159,12 +159,108 @@
           <button id="add-member-btn">+ Mitglied hinzufügen</button>
         </div>
       </div>
-      <h3>Tasks</h3>
-      <form id="task-form">
-        <input type="text" name="title" placeholder="Neuen Task eingeben..." required>
-        <button type="submit">+ Hinzufügen</button>
-      </form>
-      <ul id="task-list"></ul>
+      <div class="view-tabs" style="margin-bottom:1rem;">
+        <button id="tab-dashboard-btn" class="view-tab">Dashboard</button>
+        <button id="tab-list-btn" class="view-tab active">Liste</button>
+        <button id="tab-board-btn" class="view-tab">Board</button>
+        <button id="tab-timeline-btn" class="view-tab">Timeline</button>
+      </div>
+
+      <div id="filter-bar" style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">
+        <select id="filter-type">
+          <option value="">Alle Typen</option>
+          <option value="epic">Epics</option>
+          <option value="user_story">User Stories</option>
+          <option value="task">Tasks</option>
+          <option value="bug">Bugs</option>
+        </select>
+        <select id="filter-status">
+          <option value="">Alle Status</option>
+          <option value="todo">To Do</option>
+          <option value="in_progress">In Progress</option>
+          <option value="review">Review</option>
+          <option value="done">Done</option>
+        </select>
+        <input type="text" id="filter-label" placeholder="Label..." style="max-width:160px;">
+        <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.875rem; color:var(--text-muted);">
+          <input type="checkbox" id="filter-epic-only"> Nur Epics
+        </label>
+        <button type="button" id="filter-reset-btn" class="btn-secondary">Zurücksetzen</button>
+      </div>
+
+      <div id="proj-dashboard-view" hidden>
+        <div class="kpi-grid">
+          <div class="kpi-card"><span class="kpi-value" id="kpi-open">–</span><span class="kpi-label">Offen</span></div>
+          <div class="kpi-card"><span class="kpi-value" id="kpi-done">–</span><span class="kpi-label">Erledigt</span></div>
+          <div class="kpi-card"><span class="kpi-value" id="kpi-progress">–</span><span class="kpi-label">In Arbeit</span></div>
+          <div class="kpi-card"><span class="kpi-value" id="kpi-overdue">–</span><span class="kpi-label">Überfällig</span></div>
+          <div class="kpi-card"><span class="kpi-value" id="kpi-epics">–</span><span class="kpi-label">Epics</span></div>
+          <div class="kpi-card"><span class="kpi-value" id="kpi-bugs">–</span><span class="kpi-label">Bugs</span></div>
+        </div>
+        <h3>Burndown (letzte 14 Tage)</h3>
+        <svg id="burndown-chart" viewBox="0 0 560 200" style="width:100%; max-width:560px; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;"></svg>
+        <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-top:1.5rem;">
+          <div style="flex:1; min-width:260px;">
+            <h3>Nach Status</h3>
+            <ul id="dash-status-list" class="dash-list"></ul>
+          </div>
+          <div style="flex:1; min-width:260px;">
+            <h3>Nach Typ</h3>
+            <ul id="dash-type-list" class="dash-list"></ul>
+          </div>
+        </div>
+        <div style="display:flex; gap:2rem; flex-wrap:wrap; margin-top:1.5rem;">
+          <div style="flex:1; min-width:260px;">
+            <h3>Letzte Aktivität</h3>
+            <ul id="dash-activity-list" class="dash-list"></ul>
+          </div>
+          <div style="flex:1; min-width:260px;">
+            <h3>Anstehende Fälligkeiten</h3>
+            <ul id="dash-upcoming-list" class="dash-list"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="proj-list-view">
+        <form id="task-form">
+          <input type="text" name="title" placeholder="Neuen Task eingeben..." required>
+          <select name="issue_type">
+            <option value="task">Task</option>
+            <option value="user_story">User Story</option>
+            <option value="epic">Epic</option>
+            <option value="bug">Bug</option>
+          </select>
+          <input type="text" name="labels" placeholder="Labels (kommagetrennt)">
+          <input type="date" name="due_date">
+          <button type="submit">+ Hinzufügen</button>
+        </form>
+        <ul id="task-list"></ul>
+      </div>
+
+      <div id="proj-board-view" hidden>
+        <div class="board">
+          <div class="board-col" data-status="todo">
+            <h4>To Do <span class="board-count" id="count-todo">0</span></h4>
+            <div class="board-cards" id="col-todo"></div>
+          </div>
+          <div class="board-col" data-status="in_progress">
+            <h4>In Progress <span class="board-count" id="count-in_progress">0</span></h4>
+            <div class="board-cards" id="col-in_progress"></div>
+          </div>
+          <div class="board-col" data-status="review">
+            <h4>Review <span class="board-count" id="count-review">0</span></h4>
+            <div class="board-cards" id="col-review"></div>
+          </div>
+          <div class="board-col" data-status="done">
+            <h4>Done <span class="board-count" id="count-done">0</span></h4>
+            <div class="board-cards" id="col-done"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="proj-timeline-view" hidden>
+        <div id="timeline-track"></div>
+      </div>
 
       <div id="gitlab-block" style="margin-top:2rem;" hidden>
         <h3>GitLab-Issues</h3>

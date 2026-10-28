@@ -51,11 +51,19 @@ router.get('/:id', loadProjectRole, requireProjectPermission('view_project'), as
       'SELECT p.*, u.name AS owner_name FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1',
       [req.params.id]
     );
+    const { type, label, status, epic_only } = req.query;
+    const conditions = ['t.project_id = $1'];
+    const params = [req.params.id];
+    if (type) { params.push(type); conditions.push(`t.issue_type = $${params.length}`); }
+    if (label) { params.push(label); conditions.push(`$${params.length} = ANY(t.labels)`); }
+    if (status) { params.push(status); conditions.push(`t.status = $${params.length}`); }
+    if (epic_only === 'true') { conditions.push(`t.issue_type = 'epic'`); }
     const tasks = await db.query(
       `SELECT t.*, u.name AS assignee_name
        FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id
-       WHERE t.project_id = $1 ORDER BY t.created_at DESC`,
-      [req.params.id]
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY t.created_at DESC`,
+      params
     );
     const members = await db.query(
       `SELECT u.id, u.name, u.email, pm.role
@@ -117,14 +125,24 @@ router.delete('/:id', loadProjectRole, requireProjectPermission('delete_project'
 });
 
 router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task'), async (req, res) => {
-  const { title, description } = req.body;
+  const { title, description, issue_type, labels, due_date, epic_id } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Titel ist erforderlich' });
   }
   try {
     const { rows } = await db.query(
-      'INSERT INTO tasks (project_id, title, description, assignee_id) VALUES ($1, $2, $3, $4) RETURNING *',
-      [req.params.id, title, description || null, req.session.userId]
+      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [
+        req.params.id,
+        title,
+        description || null,
+        req.session.userId,
+        issue_type || 'task',
+        Array.isArray(labels) ? labels : [],
+        due_date || null,
+        epic_id || null,
+      ]
     );
     res.status(201).json({ task: rows[0] });
   } catch (err) {
@@ -134,7 +152,7 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
 });
 
 router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
-  const { title, description, status, assignee_id } = req.body;
+  const { title, description, status, assignee_id, issue_type, labels, due_date, epic_id } = req.body;
   try {
     const { rows } = await db.query(
       `UPDATE tasks
@@ -142,10 +160,16 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
            description = COALESCE($2, description),
            status = COALESCE($3, status),
            assignee_id = COALESCE($4, assignee_id),
+           issue_type = COALESCE($5, issue_type),
+           labels = COALESCE($6, labels),
+           due_date = COALESCE($7, due_date),
+           epic_id = COALESCE($8, epic_id),
            updated_at = NOW()
-       WHERE id = $5 AND project_id = $6
+       WHERE id = $9 AND project_id = $10
        RETURNING *`,
-      [title, description, status, assignee_id, req.params.taskId, req.params.id]
+      [title, description, status, assignee_id, issue_type,
+       labels !== undefined ? (Array.isArray(labels) ? labels : []) : null,
+       due_date, epic_id, req.params.taskId, req.params.id]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Task nicht gefunden' });
@@ -167,6 +191,75 @@ router.delete('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('d
       return res.status(404).json({ error: 'Task nicht gefunden' });
     }
     res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.get('/:id/dashboard', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const pid = req.params.id;
+
+    const kpis = await db.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE status != 'done') AS open_tasks,
+         COUNT(*) FILTER (WHERE status = 'done') AS done_tasks,
+         COUNT(*) FILTER (WHERE issue_type = 'epic') AS epics,
+         COUNT(*) FILTER (WHERE issue_type = 'user_story') AS user_stories,
+         COUNT(*) FILTER (WHERE issue_type = 'bug') AS bugs,
+         COUNT(*) FILTER (WHERE due_date < CURRENT_DATE AND status != 'done') AS overdue,
+         COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress
+       FROM tasks WHERE project_id = $1`,
+      [pid]
+    );
+
+    const byStatus = await db.query(
+      `SELECT status, COUNT(*)::int AS count FROM tasks WHERE project_id = $1 GROUP BY status`,
+      [pid]
+    );
+
+    const byType = await db.query(
+      `SELECT issue_type, COUNT(*)::int AS count FROM tasks WHERE project_id = $1 GROUP BY issue_type`,
+      [pid]
+    );
+
+    const burndown = await db.query(
+      `SELECT d::date AS date,
+              COUNT(*) FILTER (WHERE t.created_at::date <= d::date AND (t.status != 'done' OR t.updated_at::date > d::date))::int AS open
+       FROM generate_series(CURRENT_DATE - INTERVAL '13 days', CURRENT_DATE, INTERVAL '1 day') d
+       CROSS JOIN tasks t
+       WHERE t.project_id = $1
+       GROUP BY d::date ORDER BY d::date`,
+      [pid]
+    );
+
+    const activity = await db.query(
+      `SELECT t.id, t.title, t.status, t.issue_type, t.updated_at, u.name AS actor
+       FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id
+       WHERE t.project_id = $1
+       ORDER BY t.updated_at DESC
+       LIMIT 10`,
+      [pid]
+    );
+
+    const upcoming = await db.query(
+      `SELECT id, title, due_date, status, issue_type
+       FROM tasks
+       WHERE project_id = $1 AND due_date IS NOT NULL AND status != 'done'
+       ORDER BY due_date ASC
+       LIMIT 5`,
+      [pid]
+    );
+
+    res.json({
+      kpis: kpis.rows[0],
+      byStatus: byStatus.rows,
+      byType: byType.rows,
+      burndown: burndown.rows,
+      activity: activity.rows,
+      upcoming: upcoming.rows,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
