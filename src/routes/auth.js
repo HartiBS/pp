@@ -2,10 +2,18 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const roles = require('../utils/roles');
 
 const router = express.Router();
 
 const USER_FIELDS = 'id, email, username, first_name, last_name, name, role, is_active, created_at';
+
+async function userWithRoles(userId) {
+  const { rows } = await db.query(`SELECT ${USER_FIELDS} FROM users WHERE id = $1`, [userId]);
+  if (rows.length === 0) return null;
+  const userRoles = await roles.getUserRoles(userId);
+  return { ...rows[0], roles: userRoles, role: roles.effectiveRole(userRoles) };
+}
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,50}$/;
 
@@ -27,7 +35,8 @@ router.post('/register', async (req, res) => {
       [email, hash, name, firstName, lastName || null, username]
     );
     req.session.userId = rows[0].id;
-    res.status(201).json({ user: rows[0] });
+    await roles.setUserRoles(rows[0].id, ['entwickler']);
+    res.status(201).json({ user: await userWithRoles(rows[0].id) });
   } catch (err) {
     if (err.code === '23505') {
       const detail = err.constraint || '';
@@ -65,7 +74,7 @@ router.post('/login', async (req, res) => {
     }
     req.session.userId = user.id;
     const { password_hash, ...safeUser } = user;
-    res.json({ user: safeUser });
+    res.json({ user: await userWithRoles(user.id) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
@@ -81,14 +90,11 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', requireAuth, async (req, res) => {
   try {
-    const { rows } = await db.query(
-      `SELECT ${USER_FIELDS} FROM users WHERE id = $1`,
-      [req.session.userId]
-    );
-    if (rows.length === 0) {
+    const user = await userWithRoles(req.session.userId);
+    if (!user) {
       return res.status(401).json({ error: 'Nicht eingeloggt' });
     }
-    res.json({ user: rows[0] });
+    res.json({ user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
@@ -157,7 +163,7 @@ router.put('/profile', requireAuth, async (req, res) => {
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING ${USER_FIELDS}`,
       params
     );
-    res.json({ user: updated[0] });
+    res.json({ user: await userWithRoles(req.session.userId) });
   } catch (err) {
     if (err.code === '23505') {
       const detail = err.constraint || '';

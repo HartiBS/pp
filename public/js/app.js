@@ -62,7 +62,7 @@ function setUser(user) {
   $('#user-avatar').textContent = avatarInitials(user.name);
   $('#user-box').hidden = false;
   const adminBtn = $('#admin-btn');
-  if (adminBtn) adminBtn.hidden = user.role !== 'admin';
+  if (adminBtn) adminBtn.hidden = !(user.roles || []).includes('admin');
 }
 
 const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view', 'gitlab-projects-view'];
@@ -737,16 +737,19 @@ async function loadProfile() {
 async function loadAdmin() {
   loadGitLabSettings();
   const { users } = await api('/api/admin/users');
+  renderUserRoleMatrix(users);
+  await renderPermissionMatrix();
   const tbody = $('#user-table tbody');
   tbody.innerHTML = '';
   for (const u of users) {
     const tr = document.createElement('tr');
-    const roleLabel = { admin: 'Admin', projektmanager: 'Projektmanager', entwickler: 'Entwickler', beobachter: 'Beobachter' }[u.role] || u.role;
+    const roleLabels = (u.roles || []).map(r => ({ admin: 'Admin', projektmanager: 'Projektmanager', entwickler: 'Entwickler', beobachter: 'Beobachter' }[r] || r));
+    const roleBadges = roleLabels.map(l => `<span class="badge" style="margin-right:0.25rem;">${l}</span>`).join('');
     tr.innerHTML = `
       <td>${u.name}</td>
       <td>@${u.username}</td>
       <td>${u.email}</td>
-      <td><span class="badge">${roleLabel}</span></td>
+      <td>${roleBadges}</td>
       <td>${u.is_active ? 'aktiv' : 'deaktiviert'}</td>
       <td>
         <button class="edit-user-btn">Bearbeiten</button>
@@ -768,6 +771,82 @@ async function loadAdmin() {
   show('admin-view');
 }
 
+const ALL_ROLES = ['admin', 'projektmanager', 'entwickler', 'beobachter'];
+const ALL_PERMISSIONS = [
+  'view_project', 'edit_project', 'delete_project', 'manage_members',
+  'create_task', 'edit_task', 'delete_task', 'manage_users', 'manage_settings',
+];
+
+function renderUserRoleMatrix(users) {
+  const tbody = $('#user-role-matrix tbody');
+  tbody.innerHTML = '';
+  for (const u of users) {
+    const tr = document.createElement('tr');
+    const cells = ALL_ROLES.map(role => {
+      const checked = (u.roles || []).includes(role) ? 'checked' : '';
+      return `<td style="text-align:center;"><input type="checkbox" class="role-matrix-cb" data-user="${u.id}" data-role="${role}" ${checked}></td>`;
+    }).join('');
+    tr.innerHTML = `<td>${u.name} <small>(@${u.username})</small></td>${cells}`;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll('.role-matrix-cb').forEach(cb => {
+    cb.onchange = async () => {
+      const userId = cb.dataset.user;
+      const user = users.find(x => String(x.id) === String(userId));
+      let roles = (user.roles || []).filter(r => r !== cb.dataset.role);
+      if (cb.checked) roles.push(cb.dataset.role);
+      if (roles.length === 0) {
+        cb.checked = true;
+        alert('Mindestens eine Rolle muss zugewiesen bleiben.');
+        return;
+      }
+      if (String(userId) === String(state.user.id) && cb.dataset.role === 'admin' && !cb.checked) {
+        cb.checked = true;
+        alert('Die eigene Admin-Rolle kann nicht entzogen werden.');
+        return;
+      }
+      try {
+        await api(`/api/admin/users/${userId}`, { method: 'PUT', body: { roles } });
+        await loadAdmin();
+      } catch (err) {
+        alert(err.message);
+        cb.checked = !cb.checked;
+      }
+    };
+  });
+}
+
+async function renderPermissionMatrix() {
+  const { matrix } = await api('/api/admin/permissions-matrix');
+  const tbody = $('#permission-matrix tbody');
+  tbody.innerHTML = '';
+  for (const role of ALL_ROLES) {
+    const tr = document.createElement('tr');
+    const perms = matrix[role] || [];
+    const cells = ALL_PERMISSIONS.map(p => {
+      const checked = perms.includes(p) ? 'checked' : '';
+      const disabled = role === 'admin' ? 'disabled title="Admin hat immer alle Rechte"' : '';
+      return `<td style="text-align:center;"><input type="checkbox" class="perm-matrix-cb" data-role="${role}" data-perm="${p}" ${checked} ${disabled}></td>`;
+    }).join('');
+    const label = { admin: 'Admin', projektmanager: 'Projektmanager', entwickler: 'Entwickler', beobachter: 'Beobachter' }[role];
+    tr.innerHTML = `<td><span class="badge">${label}</span></td>${cells}`;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll('.perm-matrix-cb:not([disabled])').forEach(cb => {
+    cb.onchange = async () => {
+      const role = cb.dataset.role;
+      const row = cb.closest('tr');
+      const perms = [...row.querySelectorAll('.perm-matrix-cb')].filter(c => c.checked).map(c => c.dataset.perm);
+      try {
+        await api(`/api/admin/permissions-matrix/${role}`, { method: 'PUT', body: { permissions: perms } });
+      } catch (err) {
+        alert(err.message);
+        cb.checked = !cb.checked;
+      }
+    };
+  });
+}
+
 function editUser(u) {
   const form = $('#user-form');
   form.id.value = u.id;
@@ -775,8 +854,9 @@ function editUser(u) {
   form.lastName.value = u.last_name || '';
   form.username.value = u.username || '';
   form.email.value = u.email;
-  form.role.value = u.role;
-  $('#user-role-select').required = true;
+  form.querySelectorAll('input[name="roles"]').forEach(cb => {
+    cb.checked = (u.roles || []).includes(cb.value);
+  });
   form.is_active.checked = u.is_active;
   form.password.value = '';
   form.password.required = false;
@@ -897,8 +977,6 @@ bind('#new-user-btn', () => {
   form.reset();
   form.id.value = '';
   form.password.required = true;
-  $('#user-role-select').required = true;
-  $('#user-role-select').value = '';
   form.hidden = false;
 });
 bind('#cancel-user-btn', () => { $('#user-form').hidden = true; });
@@ -908,10 +986,16 @@ document.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const body = Object.fromEntries(fd);
+    body.roles = fd.getAll('roles');
     body.is_active = fd.get('is_active') === 'on';
     if (!body.password) delete body.password;
+    if (body.roles.length === 0) {
+      alert('Bitte mindestens eine Rolle auswählen.');
+      return;
+    }
     const userId = body.id;
     delete body.id;
+    delete body.role;
     try {
       if (userId) {
         await api(`/api/admin/users/${userId}`, { method: 'PUT', body });
