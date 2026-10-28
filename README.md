@@ -86,6 +86,14 @@ docker compose up --build
 | PUT | `/api/gitlab/projects/:id/issues/:iid` | Issue bearbeiten / schließen / wiedereröffnen |
 | GET | `/api/gitlab/projects/:id/issues/:iid/comments` | Kommentare laden |
 | POST | `/api/gitlab/projects/:id/issues/:iid/comments` | Kommentar hinzufügen |
+| PUT | `/api/gitlab/projects/:id/issues/:iid/assignee` | GitLab-Issue zuweisen |
+| GET | `/api/gitlab/projects-list?search=` | GitLab-Projekte & Gruppen suchen |
+| GET | `/api/gitlab/projects/:id/milestones` | Meilensteine des Projekts |
+| POST | `/api/gitlab/projects/:id/milestones/sync` | GitLab-Meilensteine synchronisieren |
+| GET | `/api/gitlab/projects/:id/gitlab-users` | GitLab-Mitglieder des Projekts |
+| GET | `/api/notifications` | Eigene Benachrichtigungen (+ unread-Count) |
+| POST | `/api/notifications/read-all` | Alle als gelesen markieren |
+| POST | `/api/notifications/:id/read` | Eine als gelesen markieren |
 
 ## Rollen
 
@@ -122,6 +130,19 @@ In der Projekt-Detailansicht gibt es vier Tabs:
 | **Timeline** (US-12) | Gantt-ähnliche Zeitleiste: Balken von Erstellung bis Fälligkeitsdatum, farbcodiert nach Status; Issues ohne Datum als Liste darunter |
 
 Issues haben einen **Typ** (`epic`, `user_story`, `task`, `bug`), **Labels** (kommagetrennt) und ein optionales **Fälligkeitsdatum**. Epics können über `epic_id` gruppiert werden.
+
+## Projektverwaltung & Benachrichtigungen (Epic 5)
+
+**US-16: GitLab-Projekte/Gruppen verwalten** — Projektmanager/Admin können in der Projekt-Detailansicht über „Aus GitLab wählen" verfügbare GitLab-Projekte und Gruppen suchen (`GET /api/gitlab/projects-list`) und ein GitLab-Projekt mit dem App-Projekt verknüpfen.
+
+**US-17: Meilensteine & Sprints synchronisieren** — GitLab-Meilensteine werden per „Synchronisieren" gespiegelt (`gitlab_milestones`) und stehen im Task-Formular als Auswahl zur Verfügung (`tasks.milestone_id`).
+
+**US-18: Issue-Zuweisung** — Tasks haben ein `assignee_id` (Default: Ersteller). Beim Anlegen und beim Ändern der Zuweisung wird der neue Bearbeiter benachrichtigt. Für GitLab-Issues: `PUT /api/gitlab/projects/:id/issues/:iid/assignee`.
+
+**US-19: Benachrichtigungen** — In-App-Glocke 🔔 im Header mit Badge (ungelesene Anzahl, Polling alle 60 s). Auslöser:
+- **Zuweisung** (`assigned`) — Task wird einem anderen Mitglied zugewiesen
+- **Statusänderung** (`status_change`) — Status eines zugewiesenen Tasks ändert sich
+- **Kommentar** (`comment`) — neuer Kommentar an einem GitLab-Issue des Projekts (alle Projektmitglieder außer dem Autor)
 
 ## GitLab-Integration (Epic 3)
 

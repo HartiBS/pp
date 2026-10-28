@@ -51,7 +51,7 @@ function setUser(user) {
   if (adminBtn) adminBtn.hidden = user.role !== 'admin';
 }
 
-const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view'];
+const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view', 'gitlab-projects-view'];
 
 function show(viewId) {
   for (const id of VIEWS) {
@@ -70,6 +70,8 @@ async function init() {
     const { user } = await api('/api/auth/me');
     setUser(user);
     await loadDashboard();
+    loadNotifications();
+    setInterval(loadNotifications, 60000);
   } catch {
     show('auth-view');
   }
@@ -116,6 +118,165 @@ function taskMatchesFilter(t, f) {
   if (f.status && t.status !== f.status) return false;
   if (f.label && !(t.labels || []).includes(f.label)) return false;
   return true;
+}
+
+function populateAssigneeSelect(members, project, readonly) {
+  const select = $('#task-assignee-select');
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '<option value="">Mir zuweisen</option>';
+  const people = [{ id: state.user.id, name: state.user.name + ' (ich)' }];
+  if (project && project.owner_id !== state.user.id) {
+    people.push({ id: project.owner_id, name: (project.owner_name || 'Owner') + ' (Owner)' });
+  }
+  for (const m of (members || [])) {
+    if (m.id !== state.user.id) people.push({ id: m.id, name: m.name });
+  }
+  for (const p of people) {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.name;
+    select.appendChild(opt);
+  }
+  if (current) select.value = current;
+  select.disabled = readonly;
+}
+
+function populateMilestoneSelect(milestones, readonly) {
+  const select = $('#task-milestone-select');
+  if (!select) return;
+  const hasMilestones = milestones && milestones.length > 0;
+  select.hidden = !hasMilestones;
+  const current = select.value;
+  select.innerHTML = '<option value="">Kein Meilenstein</option>';
+  for (const m of (milestones || [])) {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = `${m.title}${m.due_date ? ' (' + m.due_date + ')' : ''}`;
+    select.appendChild(opt);
+  }
+  if (current) select.value = current;
+  select.disabled = readonly;
+}
+
+async function loadMilestones(projectId) {
+  try {
+    const { milestones } = await api(`/api/gitlab/projects/${projectId}/milestones`);
+    state.milestones = milestones;
+    populateMilestoneSelect(milestones, !canEdit(state.myProjectRole));
+    renderMilestoneList(milestones);
+  } catch (err) {
+    state.milestones = [];
+  }
+}
+
+function renderMilestoneList(milestones) {
+  const block = $('#milestone-block');
+  const list = $('#milestone-list');
+  if (!milestones || !milestones.length) {
+    block.hidden = true;
+    return;
+  }
+  block.hidden = false;
+  list.innerHTML = '';
+  for (const m of milestones) {
+    const li = document.createElement('li');
+    const stateBadge = m.state === 'active'
+      ? '<span class="badge badge-active">aktiv</span>'
+      : '<span class="badge badge-done">geschlossen</span>';
+    li.innerHTML = `<span>${m.title}${m.due_date ? ` <small>📅 ${m.due_date}</small>` : ''}</span>${stateBadge}`;
+    list.appendChild(li);
+  }
+}
+
+async function loadNotifications() {
+  try {
+    const { notifications, unread } = await api('/api/notifications');
+    state.notifications = notifications;
+    const badge = $('#notif-badge');
+    if (unread > 0) {
+      badge.hidden = false;
+      badge.textContent = unread > 9 ? '9+' : String(unread);
+    } else {
+      badge.hidden = true;
+    }
+    renderNotificationList(notifications);
+  } catch (err) {
+    console.error('Benachrichtigungen konnten nicht geladen werden:', err.message);
+  }
+}
+
+function renderNotificationList(notifications) {
+  const list = $('#notif-list');
+  list.innerHTML = '';
+  if (!notifications.length) {
+    list.innerHTML = '<li class="notif-empty">Keine Benachrichtigungen.</li>';
+    return;
+  }
+  for (const n of notifications) {
+    const li = document.createElement('li');
+    li.className = n.read_at ? 'notif-item read' : 'notif-item unread';
+    const icons = { assigned: '👤', status_change: '🔄', comment: '💬', mention: '@', milestone: '🎯' };
+    li.innerHTML = `<span class="notif-icon">${icons[n.type] || '🔔'}</span>
+      <div><strong>${n.title}</strong><br><small>${n.body || ''}</small><br>
+      <small class="notif-time">${new Date(n.created_at).toLocaleString('de-DE')}</small></div>`;
+    li.onclick = async () => {
+      if (!n.read_at) await api(`/api/notifications/${n.id}/read`, { method: 'POST' });
+      if (n.link && state.currentProject) {
+        $('#notif-dropdown').hidden = true;
+        await loadProject(state.currentProject.id);
+      }
+    };
+    list.appendChild(li);
+  }
+}
+
+async function loadGitLabProjects(search = '') {
+  const list = $('#gitlab-project-list');
+  list.innerHTML = '<li><small>Lade Projekte...</small></li>';
+  try {
+    const { projects, groups } = await api(`/api/gitlab/projects-list?search=${encodeURIComponent(search)}`);
+    list.innerHTML = '';
+    if (!projects.length) {
+      list.innerHTML = '<li><small style="color:var(--text-muted);">Keine Projekte gefunden.</small></li>';
+    }
+    for (const p of projects) {
+      const li = document.createElement('li');
+      li.innerHTML = `<span><strong>${p.name}</strong><br><small>${p.path_with_namespace}</small></span>
+        <button class="pick-project-btn btn-secondary" data-id="${p.id}" data-name="${p.name}">Verknüpfen…</button>`;
+      li.querySelector('.pick-project-btn').onclick = () => pickGitLabProject(p);
+      list.appendChild(li);
+    }
+    const groupsBlock = $('#gitlab-groups-block');
+    const groupList = $('#gitlab-group-list');
+    if (groups.length) {
+      groupsBlock.hidden = false;
+      groupList.innerHTML = '';
+      for (const g of groups) {
+        const li = document.createElement('li');
+        li.innerHTML = `<span><strong>${g.name}</strong><br><small>${g.full_path}</small></span><a href="${g.web_url}" target="_blank" rel="noopener">↗</a>`;
+        groupList.appendChild(li);
+      }
+    } else {
+      groupsBlock.hidden = true;
+    }
+  } catch (err) {
+    list.innerHTML = `<li><small class="error">Fehler: ${err.message}</small></li>`;
+  }
+  show('gitlab-projects-view');
+}
+
+function pickGitLabProject(p) {
+  if (!state.currentProject) {
+    alert('Bitte zuerst ein Projekt öffnen.');
+    return;
+  }
+  if (!confirm(`GitLab-Projekt „${p.name}" (${p.path_with_namespace}) mit „${state.currentProject.name}" verknüpfen?`)) return;
+  api(`/api/projects/${state.currentProject.id}`, {
+    method: 'PUT',
+    body: { gitlab_project_id: p.id },
+  }).then(() => loadProject(state.currentProject.id))
+    .catch(err => alert(err.message));
 }
 
 function renderTaskList(tasks, readonly, projectId) {
@@ -404,6 +565,8 @@ async function loadProject(id) {
 
   const readonly = !canEdit(project.my_role);
   $('#task-form').hidden = readonly;
+  populateAssigneeSelect(members || [], project, readonly);
+  loadMilestones(id);
 
   const gitlabBlock = $('#gitlab-block');
   gitlabBlock.hidden = false;
@@ -623,6 +786,44 @@ bind('#logout-btn', async () => {
   show('auth-view');
 });
 
+bind('#notif-btn', () => {
+  const dd = $('#notif-dropdown');
+  dd.hidden = !dd.hidden;
+  if (!dd.hidden) loadNotifications();
+});
+document.addEventListener('click', (e) => {
+  const dd = $('#notif-dropdown');
+  const btn = $('#notif-btn');
+  if (dd && !dd.hidden && !dd.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+    dd.hidden = true;
+  }
+});
+bind('#notif-read-all', async () => {
+  await api('/api/notifications/read-all', { method: 'POST' });
+  await loadNotifications();
+});
+
+bind('#pick-gitlab-project-btn', () => loadGitLabProjects($('#gitlab-search-input').value));
+bind('#gitlab-search-btn', () => loadGitLabProjects($('#gitlab-search-input').value));
+bind('#gitlab-projects-back-btn', () => {
+  if (state.currentProject) loadProject(state.currentProject.id);
+  else loadDashboard();
+});
+bind('#sync-milestones-btn', async () => {
+  const btn = $('#sync-milestones-btn');
+  btn.disabled = true;
+  try {
+    const { milestones } = await api(`/api/gitlab/projects/${state.currentProject.id}/milestones/sync`, { method: 'POST' });
+    state.milestones = milestones;
+    populateMilestoneSelect(milestones, !canEdit(state.myProjectRole));
+    renderMilestoneList(milestones);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 bind('#profile-btn', () => loadProfile());
 bind('#profile-back-btn', () => loadDashboard());
 
@@ -702,6 +903,8 @@ document.addEventListener('submit', async (e) => {
       issue_type: fd.get('issue_type') || 'task',
       labels,
       due_date: fd.get('due_date') || null,
+      assignee_id: fd.get('assignee_id') || null,
+      milestone_id: fd.get('milestone_id') || null,
     };
     await api(`/api/projects/${state.currentProject.id}/tasks`, { method: 'POST', body });
     e.target.reset();

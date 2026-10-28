@@ -49,6 +49,10 @@ function mapGitLabIssue(issue) {
     description: issue.description || '',
     state: issue.state,
     web_url: issue.web_url,
+    assignees: (issue.assignees || []).map(a => ({ id: a.id, username: a.username, name: a.name })),
+    assignee_id: issue.assignee ? issue.assignee.id : null,
+    labels: issue.labels || [],
+    milestone: issue.milestone ? { id: issue.milestone.id, title: issue.milestone.title } : null,
   };
 }
 
@@ -119,13 +123,100 @@ async function getGitLabComments(gitlabProjectId, iid) {
   );
 }
 
+async function listGitLabProjects(search) {
+  const q = search ? `?search=${encodeURIComponent(search)}&membership=true&per_page=50&order_by=last_activity_at&sort=desc` : '?membership=true&per_page=50&order_by=last_activity_at&sort=desc';
+  const projects = await gitlabRequest(`/projects${q}`);
+  return projects.map(p => ({
+    id: p.id,
+    name: p.name,
+    path_with_namespace: p.path_with_namespace,
+    description: p.description || '',
+    web_url: p.web_url,
+    default_branch: p.default_branch || null,
+  }));
+}
+
+async function listGitLabGroups(search) {
+  const q = search ? `?search=${encodeURIComponent(search)}&per_page=50&order_by=last_activity_at&sort=desc` : '?per_page=50&order_by=last_activity_at&sort=desc';
+  const groups = await gitlabRequest(`/groups${q}`);
+  return groups.map(g => ({
+    id: g.id,
+    name: g.name,
+    full_path: g.full_path,
+    web_url: g.web_url,
+  }));
+}
+
+async function listGitLabMilestones(gitlabProjectId) {
+  const milestones = await gitlabRequest(
+    `/projects/${encodeURIComponent(gitlabProjectId)}/milestones?per_page=100&order_by=due_date&sort=asc`
+  );
+  return milestones.map(m => ({
+    gitlab_id: m.id,
+    title: m.title,
+    description: m.description || '',
+    state: m.state,
+    due_date: m.due_date || null,
+    web_url: m.web_url,
+  }));
+}
+
+async function listGitLabLabels(gitlabProjectId) {
+  return gitlabRequest(`/projects/${encodeURIComponent(gitlabProjectId)}/labels?per_page=100`);
+}
+
+async function assignGitLabIssue(gitlabProjectId, iid, assigneeId) {
+  const issue = await gitlabRequest(
+    `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}`,
+    { method: 'PUT', body: { assignee_id: assigneeId } }
+  );
+  return mapGitLabIssue(issue);
+}
+
+async function listGitLabUsers(gitlabProjectId) {
+  const users = await gitlabRequest(
+    `/projects/${encodeURIComponent(gitlabProjectId)}/users?per_page=100`
+  );
+  return users.map(u => ({ id: u.id, username: u.username, name: u.name }));
+}
+
+async function syncProjectMilestones(projectId, gitlabProjectId) {
+  const milestones = await listGitLabMilestones(gitlabProjectId);
+  for (const m of milestones) {
+    await db.query(
+      `INSERT INTO gitlab_milestones (project_id, gitlab_id, title, description, state, due_date, web_url, synced_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+       ON CONFLICT (project_id, gitlab_id) DO UPDATE
+       SET title = EXCLUDED.title,
+           description = EXCLUDED.description,
+           state = EXCLUDED.state,
+           due_date = EXCLUDED.due_date,
+           web_url = EXCLUDED.web_url,
+           synced_at = NOW()`,
+      [projectId, m.gitlab_id, m.title, m.description, m.state, m.due_date, m.web_url]
+    );
+  }
+  const { rows } = await db.query(
+    'SELECT * FROM gitlab_milestones WHERE project_id = $1 ORDER BY due_date NULLS LAST, id',
+    [projectId]
+  );
+  return rows;
+}
+
 module.exports = {
   getSettings,
   saveSettings,
   gitlabRequest,
   syncProjectIssues,
+  syncProjectMilestones,
   createGitLabIssue,
   updateGitLabIssue,
+  assignGitLabIssue,
   addGitLabComment,
   getGitLabComments,
+  listGitLabProjects,
+  listGitLabGroups,
+  listGitLabMilestones,
+  listGitLabLabels,
+  listGitLabUsers,
 };
