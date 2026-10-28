@@ -64,7 +64,10 @@ docker compose up --build
 | POST | `/api/admin/users` | Benutzer anlegen inkl. Benutzername (nur Admin) |
 | PUT | `/api/admin/users/:id` | Benutzer bearbeiten (inkl. Benutzername) / aktivieren / deaktivieren (nur Admin) |
 | DELETE | `/api/admin/users/:id` | Benutzer löschen (nur Admin) |
-| GET | `/api/admin/roles` | Verfügbare Rollen |
+| GET | `/api/admin/roles` | Verfügbare Rollen & Berechtigungen |
+| GET | `/api/admin/permissions-matrix` | Berechtigungs-Matrix (Rolle × Berechtigung) |
+| PUT | `/api/admin/permissions-matrix/:role` | Berechtigungen einer Rolle setzen |
+| PUT | `/api/admin/users/:id` | `roles` (Array) statt einzelner `role` — mehrere Rollen pro User möglich |
 | GET | `/api/projects` | Projekte des Benutzers |
 | POST | `/api/projects` | Projekt anlegen |
 | GET | `/api/projects/:id` | Projekt inkl. Tasks (Filter: `?type=&status=&label=&epic_only=true`) |
@@ -105,6 +108,15 @@ docker compose up --build
 | `beobachter` | Nur Lesen |
 
 Der erste registrierte Benutzer wird automatisch **Admin**. Rollen können in der Benutzerverwaltung (nur sichtbar für Admins) geändert werden.
+
+### Mehrere Rollen pro Benutzer (#55) & Berechtigungs-Matrix (#39, #40)
+
+- Ein Benutzer kann **mehrere globale Rollen** gleichzeitig haben (`user_roles`, N:M). Die **effektive Rolle** ist die stärkste (Priorität: `admin` > `projektmanager` > `entwickler` > `beobachter`).
+- In der **Benutzerverwaltung** gibt es zwei Checkbox-Matrizen:
+  - **Rollen-Matrix** (User × Rollen, #40 / US-22): Rollen direkt per Checkbox zuweisen/entziehen
+  - **Berechtigungs-Matrix** (Rolle × Berechtigung, #39 / US-21): Welche Berechtigungen hat welche Rolle — in der DB änderbar (`role_permissions`)
+- Die Rolle `admin` hat immer alle Rechte (Checkboxen in der Matrix deaktiviert).
+- Selbstschutz: Die eigene Admin-Rolle kann nicht entzogen und mindestens eine Rolle muss verbleiben.
 
 ### Projektbezogene Rollen (Epic 2)
 

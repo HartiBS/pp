@@ -14,6 +14,7 @@ const PROJECT_ROLES = ['projektmanager', 'entwickler', 'beobachter'];
 
 async function getProjectRole(user, projectId) {
   if (!user) return null;
+  if (user.roles && user.roles.includes('admin')) return 'admin';
   if (user.role === 'admin') return 'admin';
 
   const { rows } = await db.query(

@@ -112,19 +112,31 @@
         <label>Benutzername <input type="text" name="username" pattern="[A-Za-z0-9_.\-]{3,50}" title="3-50 Zeichen: Buchstaben, Zahlen, _ . -" required></label>
         <label>E-Mail <input type="email" name="email" required></label>
         <label>Passwort <input type="password" name="password" placeholder="(beim Bearbeiten leer lassen)"></label>
-        <label>Rolle
-          <select name="role" id="user-role-select" required>
-            <option value="" disabled selected>— Rolle wählen —</option>
-            <option value="admin">Admin</option>
-            <option value="projektmanager">Projektmanager</option>
-            <option value="entwickler">Entwickler</option>
-            <option value="beobachter">Beobachter</option>
-          </select>
-        </label>
+        <fieldset id="user-roles-fieldset" style="border:1px solid var(--border); border-radius:6px; padding:0.5rem 0.75rem;">
+          <legend style="font-size:0.85rem; color:var(--text-muted); padding:0 0.25rem;">Rollen (Mehrfachauswahl)</legend>
+          <label style="flex-direction:row;"><input type="checkbox" name="roles" value="admin"> Admin</label>
+          <label style="flex-direction:row;"><input type="checkbox" name="roles" value="projektmanager"> Projektmanager</label>
+          <label style="flex-direction:row;"><input type="checkbox" name="roles" value="entwickler"> Entwickler</label>
+          <label style="flex-direction:row;"><input type="checkbox" name="roles" value="beobachter"> Beobachter</label>
+        </fieldset>
         <label>Aktiv <input type="checkbox" name="is_active" checked></label>
         <button type="submit">Speichern</button>
         <button type="button" id="cancel-user-btn" class="btn-secondary">Abbrechen</button>
       </form>
+      <h3 style="margin-top:1.5rem;">Rollen-Matrix (User × Rollen)</h3>
+      <table id="user-role-matrix" class="matrix-table">
+        <thead>
+          <tr><th>Benutzer</th><th>Admin</th><th>Projektmanager</th><th>Entwickler</th><th>Beobachter</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <h3 style="margin-top:1.5rem;">Berechtigungs-Matrix (Rolle × Berechtigung)</h3>
+      <table id="permission-matrix" class="matrix-table">
+        <thead>
+          <tr><th>Rolle</th><th>Projekt ansehen</th><th>Projekt bearbeiten</th><th>Projekt löschen</th><th>Mitglieder verwalten</th><th>Task anlegen</th><th>Task bearbeiten</th><th>Task löschen</th><th>Benutzer verwalten</th><th>Einstellungen verwalten</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
       <table id="user-table">
         <thead>
           <tr><th>Name</th><th>Benutzername</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Aktionen</th></tr>

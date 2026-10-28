@@ -2,20 +2,32 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const roles = require('../utils/roles');
 
 const router = express.Router();
 
-const ROLES = ['admin', 'projektmanager', 'entwickler', 'beobachter'];
-const USER_FIELDS = 'id, email, username, first_name, last_name, name, role, is_active, created_at';
+const USER_FIELDS = 'id, email, username, first_name, last_name, name, is_active, created_at';
 
 router.use(requireAuth, requireRole('admin'));
+
+async function attachRoles(users) {
+  const result = [];
+  for (const u of users) {
+    result.push({
+      ...u,
+      roles: await roles.getUserRoles(u.id),
+      role: roles.effectiveRole(await roles.getUserRoles(u.id)),
+    });
+  }
+  return result;
+}
 
 router.get('/users', async (req, res) => {
   try {
     const { rows } = await db.query(
       `SELECT ${USER_FIELDS} FROM users ORDER BY created_at ASC`
     );
-    res.json({ users: rows });
+    res.json({ users: await attachRoles(rows) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
@@ -23,9 +35,10 @@ router.get('/users', async (req, res) => {
 });
 
 router.post('/users', async (req, res) => {
-  const { email, password, firstName, lastName, username, role } = req.body;
-  if (!username || !password || !role) {
-    return res.status(400).json({ error: 'Benutzername, Passwort und Rolle sind erforderlich' });
+  const { email, password, firstName, lastName, username, roles: userRoles } = req.body;
+  const roleList = Array.isArray(userRoles) ? userRoles : (req.body.role ? [req.body.role] : []);
+  if (!username || !password || roleList.length === 0) {
+    return res.status(400).json({ error: 'Benutzername, Passwort und mindestens eine Rolle sind erforderlich' });
   }
   if (!email || !firstName) {
     return res.status(400).json({ error: 'E-Mail und Vorname sind ebenfalls erforderlich' });
@@ -33,8 +46,9 @@ router.post('/users', async (req, res) => {
   if (!/^[a-zA-Z0-9_.-]{3,50}$/.test(username)) {
     return res.status(400).json({ error: 'Benutzername: 3-50 Zeichen (Buchstaben, Zahlen, _ . -)' });
   }
-  if (!ROLES.includes(role)) {
-    return res.status(400).json({ error: `Ungültige Rolle. Erlaubt: ${ROLES.join(', ')}` });
+  const invalid = roleList.filter(r => !roles.ALL_ROLES.includes(r));
+  if (invalid.length > 0) {
+    return res.status(400).json({ error: `Ungültige Rolle(n): ${invalid.join(', ')}. Erlaubt: ${roles.ALL_ROLES.join(', ')}` });
   }
   const name = [firstName, lastName].filter(Boolean).join(' ');
 
@@ -43,9 +57,11 @@ router.post('/users', async (req, res) => {
     const { rows } = await db.query(
       `INSERT INTO users (email, password_hash, name, first_name, last_name, username, role)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${USER_FIELDS}`,
-      [email, hash, name, firstName, lastName || null, username, role]
+      [email, hash, name, firstName, lastName || null, username, roles.effectiveRole(roleList)]
     );
-    res.status(201).json({ user: rows[0] });
+    await roles.setUserRoles(rows[0].id, roleList);
+    const user = { ...rows[0], roles: roleList, role: roles.effectiveRole(roleList) };
+    res.status(201).json({ user });
   } catch (err) {
     if (err.code === '23505') {
       const detail = err.constraint || '';
@@ -60,10 +76,17 @@ router.post('/users', async (req, res) => {
 });
 
 router.put('/users/:id', async (req, res) => {
-  const { firstName, lastName, username, email, role, is_active, password } = req.body;
+  const { firstName, lastName, username, email, is_active, password } = req.body;
+  const roleList = Array.isArray(req.body.roles) ? req.body.roles : (req.body.role ? [req.body.role] : undefined);
 
-  if (role && !ROLES.includes(role)) {
-    return res.status(400).json({ error: `Ungültige Rolle. Erlaubt: ${ROLES.join(', ')}` });
+  if (roleList) {
+    const invalid = roleList.filter(r => !roles.ALL_ROLES.includes(r));
+    if (invalid.length > 0) {
+      return res.status(400).json({ error: `Ungültige Rolle(n): ${invalid.join(', ')}. Erlaubt: ${roles.ALL_ROLES.join(', ')}` });
+    }
+    if (roleList.length === 0) {
+      return res.status(400).json({ error: 'Mindestens eine Rolle muss zugewiesen bleiben' });
+    }
   }
   if (username && !/^[a-zA-Z0-9_.-]{3,50}$/.test(username)) {
     return res.status(400).json({ error: 'Benutzername: 3-50 Zeichen (Buchstaben, Zahlen, _ . -)' });
@@ -71,7 +94,7 @@ router.put('/users/:id', async (req, res) => {
   if (req.params.id === String(req.currentUser.id) && is_active === false) {
     return res.status(400).json({ error: 'Der eigene Account kann nicht deaktiviert werden' });
   }
-  if (req.params.id === String(req.currentUser.id) && role && role !== 'admin') {
+  if (req.params.id === String(req.currentUser.id) && roleList && !roleList.includes('admin')) {
     return res.status(400).json({ error: 'Die eigene Admin-Rolle kann nicht entzogen werden' });
   }
 
@@ -95,7 +118,6 @@ router.put('/users/:id', async (req, res) => {
       params.push(fullName);
       updates.push(`name = $${params.length}`);
     }
-    if (role) { params.push(role); updates.push(`role = $${params.length}`); }
     if (is_active !== undefined) { params.push(is_active); updates.push(`is_active = $${params.length}`); }
     if (password) {
       const hash = await bcrypt.hash(password, 10);
@@ -103,19 +125,33 @@ router.put('/users/:id', async (req, res) => {
       updates.push(`password_hash = $${params.length}`);
     }
 
-    if (updates.length === 0) {
-      return res.status(400).json({ error: 'Keine Änderungen angegeben' });
+    let user = null;
+    if (updates.length > 0) {
+      params.push(req.params.id);
+      const { rows } = await db.query(
+        `UPDATE users SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING ${USER_FIELDS}`,
+        params
+      );
+      if (rows.length === 0) {
+        return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+      }
+      user = rows[0];
+    } else {
+      const { rows } = await db.query(`SELECT ${USER_FIELDS} FROM users WHERE id = $1`, [req.params.id]);
+      user = rows[0];
     }
 
-    params.push(req.params.id);
-    const { rows } = await db.query(
-      `UPDATE users SET ${updates.join(', ')} WHERE id = $${params.length} RETURNING ${USER_FIELDS}`,
-      params
-    );
-    if (rows.length === 0) {
-      return res.status(404).json({ error: 'Benutzer nicht gefunden' });
+    if (roleList) {
+      const saved = await roles.setUserRoles(req.params.id, roleList);
+      const eff = roles.effectiveRole(saved);
+      await db.query('UPDATE users SET role = $1 WHERE id = $2', [eff, req.params.id]);
+      user = { ...user, role: eff };
+      res.json({ user: { ...user, roles: saved } });
+      return;
     }
-    res.json({ user: rows[0] });
+
+    const userRoles = await roles.getUserRoles(req.params.id);
+    res.json({ user: { ...user, roles: userRoles, role: roles.effectiveRole(userRoles) } });
   } catch (err) {
     if (err.code === '23505') {
       const detail = err.constraint || '';
@@ -145,8 +181,30 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
-router.get('/roles', (req, res) => {
-  res.json({ roles: ROLES });
+router.get('/roles', async (req, res) => {
+  res.json({ roles: roles.ALL_ROLES, permissions: roles.PERMISSIONS });
+});
+
+router.get('/permissions-matrix', async (req, res) => {
+  try {
+    res.json({ matrix: await roles.getRolePermissions(), permissions: roles.PERMISSIONS, roles: roles.ALL_ROLES });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.put('/permissions-matrix/:role', async (req, res) => {
+  const { permissions } = req.body;
+  if (!Array.isArray(permissions)) {
+    return res.status(400).json({ error: 'permissions muss ein Array sein' });
+  }
+  try {
+    const saved = await roles.setRolePermissions(req.params.role, permissions);
+    res.json({ role: req.params.role, permissions: saved });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

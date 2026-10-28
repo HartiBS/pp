@@ -19,9 +19,9 @@ router.get('/', async (req, res) => {
        JOIN users u ON u.id = p.owner_id
        LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
        WHERE p.owner_id = $1 OR pm.user_id IS NOT NULL
-          OR $2 = 'admin'
+          OR $2 = TRUE
        ORDER BY p.updated_at DESC`,
-      [req.session.userId, req.currentUser.role]
+      [req.session.userId, req.currentUser.roles.includes('admin')]
     );
     res.json({ projects: rows });
   } catch (err) {
