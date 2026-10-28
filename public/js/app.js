@@ -31,7 +31,7 @@ function avatarInitials(name) {
   return (name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 }
 
-async function api(path, options = {}) {
+async function api(path, options = {}, isRetry = false) {
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   const isWrite = options.method && !['GET', 'HEAD', 'OPTIONS'].includes(options.method.toUpperCase());
   if (isWrite && state.csrfToken) {
@@ -43,7 +43,14 @@ async function api(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Fehler');
+  if (!res.ok) {
+    if (res.status === 403 && data.error === 'Ungültiges oder fehlendes CSRF-Token' && !isRetry) {
+      state.csrfToken = null;
+      await fetchCsrfToken();
+      return api(path, options, true);
+    }
+    throw new Error(data.error || 'Fehler');
+  }
   return data;
 }
 
@@ -908,8 +915,10 @@ document.addEventListener('submit', async (e) => {
 bind('#logout-btn', async () => {
   await api('/api/auth/logout', { method: 'POST' });
   state.user = null;
+  state.csrfToken = null;
   $('#user-box').hidden = true;
   show('auth-view');
+  await fetchCsrfToken();
 });
 
 bind('#notif-btn', () => {
