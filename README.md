@@ -26,11 +26,17 @@ App erreichbar unter: http://localhost:3000
 ## Lokale Entwicklung (mit Docker)
 
 ```bash
-cd docker
 docker compose up --build
 ```
 
 App erreichbar unter: http://localhost:3000
+
+Alternativ aus dem `docker/`-Verzeichnis:
+
+```bash
+cd docker
+docker compose up --build
+```
 
 ## Produktivbetrieb mit Apache
 

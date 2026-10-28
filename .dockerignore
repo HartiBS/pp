@@ -1,0 +1,12 @@
+node_modules/
+.env
+.git
+.github
+workflows
+apache
+docker
+*.log
+.DS_Store
+dist/
+coverage/
+npm-debug.log*
