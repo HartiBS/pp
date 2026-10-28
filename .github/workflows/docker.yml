@@ -3,9 +3,9 @@ name: Docker
 on:
   push:
     branches: [main]
-    paths: ["docker/**"]
+    paths: ["docker/**", "docker-compose.yml", "Dockerfile"]
   pull_request:
-    paths: ["docker/**"]
+    paths: ["docker/**", "docker-compose.yml", "Dockerfile"]
 
 jobs:
   build:
@@ -18,3 +18,5 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
