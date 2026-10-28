@@ -4,6 +4,10 @@ const { requireAuth } = require('../middleware/auth');
 const { loadProjectRole, requireProjectPermission, PROJECT_ROLES } = require('../utils/permissions');
 const notifications = require('../utils/notifications');
 const gitlab = require('../utils/gitlab');
+const taskHistory = require('../utils/taskHistory');
+const taskWatchers = require('../utils/taskWatchers');
+const taskComments = require('../utils/taskComments');
+const taskSubtasks = require('../utils/taskSubtasks');
 
 const router = express.Router();
 
@@ -127,10 +131,12 @@ router.delete('/:id', loadProjectRole, requireProjectPermission('delete_project'
 });
 
 router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task'), async (req, res) => {
-  const { title, description, issue_type, labels, due_date, epic_id, assignee_id, milestone_id, push_to_gitlab } = req.body;
+  const { title, description, issue_type, labels, due_date, epic_id, assignee_id, milestone_id, push_to_gitlab, priority, estimated_hours } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Titel ist erforderlich' });
   }
+  const validPriorities = ['low', 'normal', 'high', 'critical'];
+  const taskPriority = priority && validPriorities.includes(priority) ? priority : 'normal';
   const finalAssignee = assignee_id || req.session.userId;
   try {
     const { rows: projectRows } = await db.query(
@@ -155,9 +161,15 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
       }
     }
 
+    const estHours = estimated_hours !== undefined && estimated_hours !== null && estimated_hours !== ''
+      ? Number(estimated_hours) : null;
+    if (estHours !== null && (isNaN(estHours) || estHours < 0)) {
+      return res.status(400).json({ error: 'estimated_hours muss eine positive Zahl sein' });
+    }
+
     const { rows } = await db.query(
-      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, gitlab_iid)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, gitlab_iid, priority, estimated_hours, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
       [
         req.params.id,
         title,
@@ -169,9 +181,20 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
         epic_id || null,
         milestone_id || null,
         gitlabIid,
+        taskPriority,
+        estHours,
+        req.session.userId,
       ]
     );
+    const newTask = rows[0];
+
+    // US-24: Historie – Task erstellt
+    await taskHistory.logTaskChange(newTask.id, req.session.userId, 'created');
+
+    // US-27: Ersteller und Bearbeiter automatisch als Watcher hinzufügen
+    await taskWatchers.addWatcher(newTask.id, req.session.userId);
     if (finalAssignee && Number(finalAssignee) !== Number(req.session.userId)) {
+      await taskWatchers.addWatcher(newTask.id, Number(finalAssignee));
       await notifications.notifyAssignment({
         taskTitle: title,
         projectId: req.params.id,
@@ -179,7 +202,8 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
         actorName: req.currentUser.name,
       });
     }
-    res.status(201).json({ task: rows[0] });
+
+    res.status(201).json({ task: { ...newTask, subtask_count: 0, subtask_done: 0 } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
@@ -187,19 +211,48 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
 });
 
 router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
-  const { title, description, status, assignee_id, issue_type, labels, due_date, epic_id, milestone_id } = req.body;
+  const { title, description, status, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, priority, estimated_hours, spent_hours } = req.body;
   try {
     const prev = await db.query(
-      `SELECT t.status, t.assignee_id, t.title, t.gitlab_iid, p.gitlab_project_id
+      `SELECT t.*, p.gitlab_project_id
        FROM tasks t JOIN projects p ON p.id = t.project_id
        WHERE t.id = $1 AND t.project_id = $2`,
       [req.params.taskId, req.params.id]
     );
-    const oldStatus = prev.rows[0] ? prev.rows[0].status : null;
-    const oldAssignee = prev.rows[0] ? prev.rows[0].assignee_id : null;
-    const taskTitle = (title || (prev.rows[0] && prev.rows[0].title)) || 'Task';
-    const gitlabIid = prev.rows[0] ? prev.rows[0].gitlab_iid : null;
-    const gitlabProjectId = prev.rows[0] ? prev.rows[0].gitlab_project_id : null;
+    if (prev.rows.length === 0) {
+      return res.status(404).json({ error: 'Task nicht gefunden' });
+    }
+    const oldTask = prev.rows[0];
+    const oldStatus = oldTask.status;
+    const oldAssignee = oldTask.assignee_id;
+    const taskTitle = (title || oldTask.title) || 'Task';
+    const gitlabIid = oldTask.gitlab_iid;
+    const gitlabProjectId = oldTask.gitlab_project_id;
+
+    // US-25: Priorität validieren
+    const validPriorities = ['low', 'normal', 'high', 'critical'];
+    let newPriority = null;
+    if (priority !== undefined) {
+      if (!validPriorities.includes(priority)) {
+        return res.status(400).json({ error: 'Ungültige Priorität. Erlaubt: low, normal, high, critical' });
+      }
+      newPriority = priority;
+    }
+
+    // US-25: Stunden validieren
+    let estHours = null, spentH = null;
+    if (estimated_hours !== undefined) {
+      estHours = estimated_hours === null || estimated_hours === '' ? null : Number(estimated_hours);
+      if (estHours !== null && (isNaN(estHours) || estHours < 0)) {
+        return res.status(400).json({ error: 'estimated_hours muss eine positive Zahl sein' });
+      }
+    }
+    if (spent_hours !== undefined) {
+      spentH = spent_hours === null || spent_hours === '' ? 0 : Number(spent_hours);
+      if (isNaN(spentH) || spentH < 0) {
+        return res.status(400).json({ error: 'spent_hours muss eine positive Zahl sein' });
+      }
+    }
 
     const { rows } = await db.query(
       `UPDATE tasks
@@ -212,16 +265,24 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
            due_date = COALESCE($7, due_date),
            epic_id = COALESCE($8, epic_id),
            milestone_id = COALESCE($9, milestone_id),
+           priority = COALESCE($10, priority),
+           estimated_hours = COALESCE($11, estimated_hours),
+           spent_hours = COALESCE($12, spent_hours),
            updated_at = NOW()
-       WHERE id = $10 AND project_id = $11
+       WHERE id = $13 AND project_id = $14
        RETURNING *`,
       [title, description, status, assignee_id, issue_type,
        labels !== undefined ? (Array.isArray(labels) ? labels : []) : null,
-       due_date, epic_id, milestone_id, req.params.taskId, req.params.id]
+       due_date, epic_id, milestone_id, newPriority, estHours, spentH,
+       req.params.taskId, req.params.id]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Task nicht gefunden' });
     }
+    const updatedTask = rows[0];
+
+    // US-24: Historie – Änderungen protokollieren
+    await taskHistory.logTaskDiff(updatedTask.id, req.session.userId, oldTask, updatedTask);
 
     // #57: Änderungen an verknüpfte GitLab-Issues pushen
     if (gitlabIid && gitlabProjectId) {
@@ -248,7 +309,9 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
       }
     }
 
+    // US-27: Neuer Bearbeiter wird automatisch Watcher
     if (assignee_id && Number(assignee_id) !== Number(oldAssignee)) {
+      await taskWatchers.addWatcher(updatedTask.id, Number(assignee_id));
       await notifications.notifyAssignment({
         taskTitle,
         projectId: req.params.id,
@@ -256,22 +319,28 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
         actorName: req.currentUser.name,
       });
     }
+
+    // US-27: Statusänderung – alle Watcher benachrichtigen (außer Actor)
     if (status && oldStatus && status !== oldStatus) {
-      const notifyTarget = assignee_id || oldAssignee;
-      if (notifyTarget) {
-        await notifications.notifyStatusChange({
-          taskTitle,
-          projectId: req.params.id,
-          oldStatus,
-          newStatus: status,
-          assigneeId: notifyTarget,
-          actorName: req.currentUser.name,
-          actorId: req.session.userId,
-        });
+      const watcherIds = await taskWatchers.getWatcherIds(updatedTask.id);
+      for (const wid of watcherIds) {
+        if (Number(wid) !== Number(req.session.userId)) {
+          await notifications.notifyStatusChange({
+            taskTitle,
+            projectId: req.params.id,
+            oldStatus,
+            newStatus: status,
+            assigneeId: wid,
+            actorName: req.currentUser.name,
+            actorId: req.session.userId,
+          });
+        }
       }
     }
 
-    res.json({ task: rows[0] });
+    // Subtask-Fortschritt anreichern
+    const progress = await taskSubtasks.getSubtaskProgress(updatedTask.id);
+    res.json({ task: { ...updatedTask, subtask_count: progress.total, subtask_done: progress.done } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
@@ -280,6 +349,8 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
 
 router.delete('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('delete_task'), async (req, res) => {
   try {
+    // US-24: Historie vor dem Löschen protokollieren
+    await taskHistory.logTaskChange(req.params.taskId, req.session.userId, 'deleted');
     const { rowCount } = await db.query(
       'DELETE FROM tasks WHERE id = $1 AND project_id = $2',
       [req.params.taskId, req.params.id]
@@ -293,6 +364,274 @@ router.delete('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('d
     res.status(500).json({ error: 'Serverfehler' });
   }
 });
+
+// ===== Epic 6: Aufgabenmanagement – Erweiterte Task-Features =====
+
+// US-23: Task-Kommentare
+router.get('/:id/tasks/:taskId/comments', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const comments = await taskComments.getComments(req.params.taskId);
+    res.json({ comments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.post('/:id/tasks/:taskId/comments', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
+  const { body } = req.body;
+  if (!body || !body.trim()) {
+    return res.status(400).json({ error: 'Kommentar-Text ist erforderlich' });
+  }
+  try {
+    // Task Infos für Benachrichtigungen
+    const taskInfo = await db.query(
+      'SELECT title FROM tasks WHERE id = $1 AND project_id = $2',
+      [req.params.taskId, req.params.id]
+    );
+    if (taskInfo.rows.length === 0) {
+      return res.status(404).json({ error: 'Task nicht gefunden' });
+    }
+    const comment = await taskComments.createComment(req.params.taskId, req.session.userId, body.trim());
+
+    // Historie
+    await taskHistory.logTaskChange(req.params.taskId, req.session.userId, 'commented');
+
+    // Autor als Watcher hinzufügen
+    await taskWatchers.addWatcher(req.params.taskId, req.session.userId);
+
+    // Alle Watcher benachrichtigen (außer Kommentator)
+    const watcherIds = await taskWatchers.getWatcherIds(req.params.taskId);
+    const snippet = body.trim().slice(0, 100);
+    for (const wid of watcherIds) {
+      if (Number(wid) !== Number(req.session.userId)) {
+        await notifications.notify(wid, {
+          type: 'comment',
+          title: `Neuer Kommentar: ${taskInfo.rows[0].title}`,
+          body: `${req.currentUser.name}: ${snippet}`,
+          link: `/#/project/${req.params.id}`,
+        });
+      }
+    }
+
+    // GitLab-Push wenn verknüpft
+    const gitlabInfo = await db.query(
+      'SELECT t.gitlab_iid, p.gitlab_project_id FROM tasks t JOIN projects p ON p.id = t.project_id WHERE t.id = $1',
+      [req.params.taskId]
+    );
+    if (gitlabInfo.rows[0]?.gitlab_iid && gitlabInfo.rows[0]?.gitlab_project_id) {
+      try {
+        await gitlab.addGitLabComment(
+          gitlabInfo.rows[0].gitlab_project_id,
+          gitlabInfo.rows[0].gitlab_iid,
+          `**${req.currentUser.name}** (PP): ${body.trim()}`
+        );
+      } catch (gitlabErr) {
+        console.error('GitLab-Kommentar fehlgeschlagen:', gitlabErr.message);
+      }
+    }
+
+    res.status(201).json({ comment });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.put('/:id/tasks/:taskId/comments/:commentId', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
+  const { body } = req.body;
+  if (!body || !body.trim()) {
+    return res.status(400).json({ error: 'Kommentar-Text ist erforderlich' });
+  }
+  try {
+    // Nur Autor darf bearbeiten
+    const check = await db.query(
+      'SELECT user_id FROM task_comments WHERE id = $1 AND task_id = $2',
+      [req.params.commentId, req.params.taskId]
+    );
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Kommentar nicht gefunden' });
+    }
+    if (Number(check.rows[0].user_id) !== Number(req.session.userId) && req.projectRole !== 'admin' && req.projectRole !== 'projektmanager') {
+      return res.status(403).json({ error: 'Nur der Autor darf diesen Kommentar bearbeiten' });
+    }
+    const updated = await taskComments.updateComment(req.params.commentId, req.params.taskId, body.trim());
+    res.json({ comment: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.delete('/:id/tasks/:taskId/comments/:commentId', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
+  try {
+    // Autor oder PM/Admin darf löschen
+    const check = await db.query(
+      'SELECT user_id FROM task_comments WHERE id = $1 AND task_id = $2',
+      [req.params.commentId, req.params.taskId]
+    );
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Kommentar nicht gefunden' });
+    }
+    if (Number(check.rows[0].user_id) !== Number(req.session.userId) && req.projectRole !== 'admin' && req.projectRole !== 'projektmanager') {
+      return res.status(403).json({ error: 'Keine Berechtigung zum Löschen' });
+    }
+    await taskComments.deleteComment(req.params.commentId, req.params.taskId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// US-24: Task-Historie
+router.get('/:id/tasks/:taskId/history', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const history = await taskHistory.getTaskHistory(req.params.taskId);
+    res.json({ history });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// US-26: Subtasks / Checkliste
+router.get('/:id/tasks/:taskId/subtasks', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const subtasks = await taskSubtasks.getSubtasks(req.params.taskId);
+    const progress = await taskSubtasks.getSubtaskProgress(req.params.taskId);
+    res.json({ subtasks, progress });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.post('/:id/tasks/:taskId/subtasks', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
+  const { title, assignee_id } = req.body;
+  if (!title || !title.trim()) {
+    return res.status(400).json({ error: 'Titel ist erforderlich' });
+  }
+  try {
+    const subtask = await taskSubtasks.createSubtask(req.params.taskId, title.trim(), assignee_id || null);
+    await taskHistory.logTaskChange(req.params.taskId, req.session.userId, 'updated', 'subtask_added', null, title.trim());
+    res.status(201).json({ subtask });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.put('/:id/tasks/:taskId/subtasks/:subtaskId', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
+  const { title, is_done, assignee_id } = req.body;
+  try {
+    const prev = await db.query(
+      'SELECT is_done FROM task_subtasks WHERE id = $1 AND task_id = $2',
+      [req.params.subtaskId, req.params.taskId]
+    );
+    if (prev.rows.length === 0) {
+      return res.status(404).json({ error: 'Subtask nicht gefunden' });
+    }
+    const wasDone = prev.rows[0].is_done;
+    const subtask = await taskSubtasks.updateSubtask(req.params.subtaskId, req.params.taskId, {
+      title, is_done, assignee_id,
+    });
+    if (is_done !== undefined && Boolean(is_done) !== Boolean(wasDone)) {
+      await taskHistory.logTaskChange(
+        req.params.taskId, req.session.userId, 'subtask_toggled',
+        'subtask', wasDone ? 'erledigt' : 'offen', is_done ? 'erledigt' : 'offen'
+      );
+    }
+    res.json({ subtask });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.delete('/:id/tasks/:taskId/subtasks/:subtaskId', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
+  try {
+    const deleted = await taskSubtasks.deleteSubtask(req.params.subtaskId, req.params.taskId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Subtask nicht gefunden' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// US-27: Task-Watcher
+router.get('/:id/tasks/:taskId/watchers', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const watchers = await taskWatchers.getWatchers(req.params.taskId);
+    const watching = await taskWatchers.isWatching(req.params.taskId, req.session.userId);
+    res.json({ watchers, watching });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.post('/:id/tasks/:taskId/watch', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    await taskWatchers.addWatcher(req.params.taskId, req.session.userId);
+    res.json({ ok: true, watching: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.delete('/:id/tasks/:taskId/watch', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    await taskWatchers.removeWatcher(req.params.taskId, req.session.userId);
+    res.json({ ok: true, watching: false });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// US-28: Task-Detail (alle Infos auf einmal)
+router.get('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT t.*, u.name AS assignee_name, c.name AS creator_name
+       FROM tasks t
+       LEFT JOIN users u ON u.id = t.assignee_id
+       LEFT JOIN users c ON c.id = t.created_by
+       WHERE t.id = $1 AND t.project_id = $2`,
+      [req.params.taskId, req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Task nicht gefunden' });
+    }
+    const task = rows[0];
+    const [comments, history, subtasks, watchers, progress] = await Promise.all([
+      taskComments.getComments(req.params.taskId),
+      taskHistory.getTaskHistory(req.params.taskId),
+      taskSubtasks.getSubtasks(req.params.taskId),
+      taskWatchers.getWatchers(req.params.taskId),
+      taskSubtasks.getSubtaskProgress(req.params.taskId),
+    ]);
+    const watching = await taskWatchers.isWatching(req.params.taskId, req.session.userId);
+    res.json({
+      task: { ...task, subtask_count: progress.total, subtask_done: progress.done },
+      comments,
+      history,
+      subtasks,
+      watchers,
+      watching,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+
 
 router.get('/:id/dashboard', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
   try {

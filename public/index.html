@@ -271,6 +271,13 @@
             <option value="epic">Epic</option>
             <option value="bug">Bug</option>
           </select>
+          <select name="priority" title="Priorität">
+            <option value="normal">Normal</option>
+            <option value="low">Niedrig</option>
+            <option value="high">Hoch</option>
+            <option value="critical">Kritisch</option>
+          </select>
+          <input type="number" name="estimated_hours" placeholder="Schätzung (h)" min="0" step="0.5" style="width:100px;">
           <input type="text" name="labels" placeholder="Labels (kommagetrennt)">
           <input type="date" name="due_date">
           <select name="assignee_id" id="task-assignee-select">
@@ -369,8 +376,113 @@
         <button type="submit">Kommentieren</button>
       </form>
     </section>
+    <section id="task-detail-view" hidden>
+      <button id="task-detail-back-btn">← Zurück zum Projekt</button>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
+        <div style="flex:1;">
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <span id="td-type-badge" class="badge"></span>
+            <span id="td-priority-badge" class="badge"></span>
+            <span id="td-status-badge" class="badge"></span>
+            <span id="td-gitlab-badge" class="badge" hidden></span>
+            <button id="td-watch-btn" class="btn-secondary" title="Task abonnieren">☆ Watch</button>
+          </div>
+          <h2 id="td-title" style="margin-top:0.5rem;"></h2>
+          <p id="td-description" style="color:var(--text-muted);"></p>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:0.35rem; align-items:flex-end; font-size:0.85rem; color:var(--text-muted);">
+          <span id="td-assignee"></span>
+          <span id="td-creator"></span>
+          <span id="td-due"></span>
+          <span id="td-hours"></span>
+          <span id="td-labels"></span>
+          <a id="td-gitlab-link" href="#" target="_blank" rel="noopener" hidden>In GitLab öffnen ↗</a>
+        </div>
+      </div>
+
+      <div id="td-subtask-progress" hidden style="margin-bottom:1rem;">
+        <small>Checkliste: <span id="td-subtask-count">0/0</span></small>
+        <div style="background:var(--border); border-radius:4px; height:8px; margin-top:0.25rem;">
+          <div id="td-subtask-bar" style="background:var(--accent); height:8px; border-radius:4px; width:0%; transition:width 0.3s;"></div>
+        </div>
+      </div>
+
+      <div class="view-tabs" style="margin-bottom:1rem;">
+        <button id="td-tab-info-btn" class="view-tab active">Info</button>
+        <button id="td-tab-comments-btn" class="view-tab">Kommentare <span id="td-comment-count" class="badge" style="margin-left:0.25rem;">0</span></button>
+        <button id="td-tab-subtasks-btn" class="view-tab">Checkliste <span id="td-subtask-badge" class="badge" style="margin-left:0.25rem;" hidden></span></button>
+        <button id="td-tab-history-btn" class="view-tab">Historie</button>
+        <button id="td-tab-watchers-btn" class="view-tab">Watcher</button>
+      </div>
+
+      <div id="td-tab-info" class="td-tab-content">
+        <form id="td-edit-form">
+          <label>Titel <input type="text" name="title" id="td-edit-title" required></label>
+          <label>Beschreibung <textarea name="description" id="td-edit-description"></textarea></label>
+          <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+            <label>Status
+              <select name="status" id="td-edit-status">
+                <option value="todo">To Do</option>
+                <option value="in_progress">In Progress</option>
+                <option value="review">Review</option>
+                <option value="done">Done</option>
+              </select>
+            </label>
+            <label>Priorität
+              <select name="priority" id="td-edit-priority">
+                <option value="low">Niedrig</option>
+                <option value="normal">Normal</option>
+                <option value="high">Hoch</option>
+                <option value="critical">Kritisch</option>
+              </select>
+            </label>
+            <label>Typ
+              <select name="issue_type" id="td-edit-type">
+                <option value="task">Task</option>
+                <option value="user_story">User Story</option>
+                <option value="epic">Epic</option>
+                <option value="bug">Bug</option>
+              </select>
+            </label>
+            <label>Fällig <input type="date" name="due_date" id="td-edit-due"></label>
+            <label>Geschätzt (h) <input type="number" name="estimated_hours" id="td-edit-est" min="0" step="0.5" style="width:80px;"></label>
+            <label>Aufgewendet (h) <input type="number" name="spent_hours" id="td-edit-spent" min="0" step="0.5" style="width:80px;"></label>
+          </div>
+          <label>Labels (kommagetrennt) <input type="text" name="labels" id="td-edit-labels"></label>
+          <div style="display:flex; gap:0.75rem; margin-top:0.5rem;">
+            <button type="submit">Speichern</button>
+            <button type="button" id="td-delete-btn" class="btn-secondary" style="margin-left:auto;">🗑 Task löschen</button>
+          </div>
+        </form>
+        <p id="td-msg"></p>
+      </div>
+
+      <div id="td-tab-comments" class="td-tab-content" hidden>
+        <ul id="td-comment-list" class="dash-list"></ul>
+        <form id="td-comment-form" style="margin-top:1rem;">
+          <textarea name="body" placeholder="Kommentar schreiben..." required></textarea>
+          <button type="submit">Kommentieren</button>
+        </form>
+      </div>
+
+      <div id="td-tab-subtasks" class="td-tab-content" hidden>
+        <form id="td-subtask-form" style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+          <input type="text" name="title" placeholder="Neuer Checklisten-Punkt..." required style="flex:1;">
+          <button type="submit">+ Hinzufügen</button>
+        </form>
+        <ul id="td-subtask-list" class="dash-list"></ul>
+      </div>
+
+      <div id="td-tab-history" class="td-tab-content" hidden>
+        <ul id="td-history-list" class="dash-list"></ul>
+      </div>
+
+      <div id="td-tab-watchers" class="td-tab-content" hidden>
+        <ul id="td-watcher-list" class="dash-list"></ul>
+      </div>
+    </section>
   </main>
 
-  <script src="/js/app.js?v=3"></script>
+  <script src="/js/app.js?v=4"></script>
 </body>
 </html>

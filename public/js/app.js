@@ -65,7 +65,7 @@ function setUser(user) {
   if (adminBtn) adminBtn.hidden = !(user.roles || []).includes('admin');
 }
 
-const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view', 'gitlab-projects-view'];
+const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view', 'gitlab-projects-view', 'task-detail-view'];
 
 function show(viewId) {
   for (const id of VIEWS) {
@@ -1038,6 +1038,8 @@ document.addEventListener('submit', async (e) => {
       assignee_id: fd.get('assignee_id') || null,
       milestone_id: fd.get('milestone_id') || null,
       push_to_gitlab: fd.get('push_to_gitlab') === 'on',
+      priority: fd.get('priority') || 'normal',
+      estimated_hours: fd.get('estimated_hours') || null,
     };
     await api(`/api/projects/${state.currentProject.id}/tasks`, { method: 'POST', body });
     e.target.reset();
@@ -1252,3 +1254,488 @@ document.addEventListener('submit', async (e) => {
 });
 
 init();
+
+/* ===== EPIC 6: AUFGABENMANAGEMENT ===== */
+
+const PRIORITY_LABELS = { low: 'Niedrig', normal: 'Normal', high: 'Hoch', critical: 'Kritisch' };
+const PRIORITY_CLASSES = { low: 'badge-todo', normal: 'badge-active', high: 'badge-review', critical: 'badge-done' };
+
+function priorityBadge(p) {
+  const cls = PRIORITY_CLASSES[p] || 'badge-todo';
+  const label = PRIORITY_LABELS[p] || p;
+  return `<span class="badge ${cls}">⚑ ${label}</span>`;
+}
+
+/* ===== TASK DETAIL VIEW (US-28) ===== */
+
+async function loadTaskDetail(projectId, taskId) {
+  try {
+    const data = await api(`/api/projects/${projectId}/tasks/${taskId}`);
+    state.currentTask = data;
+    renderTaskDetail(data);
+    show('task-detail-view');
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function renderTaskDetail(data) {
+  const { task, comments, history, subtasks, watchers, watching } = data;
+  state.currentTask = data;
+
+  // Header
+  $('#td-title').textContent = task.title;
+  $('#td-description').textContent = task.description || '';
+  $('#td-type-badge').textContent = ISSUE_TYPE_LABELS[task.issue_type] || task.issue_type;
+  $('#td-priority-badge').innerHTML = priorityBadge(task.priority || 'normal');
+  $('#td-status-badge').className = `badge ${badgeClass(task.status)}`;
+  $('#td-status-badge').textContent = task.status;
+
+  // GitLab
+  const glBadge = $('#td-gitlab-badge');
+  const glLink = $('#td-gitlab-link');
+  if (task.gitlab_iid) {
+    glBadge.hidden = false;
+    glBadge.textContent = `GL #${task.gitlab_iid}`;
+    glLink.hidden = false;
+  } else {
+    glBadge.hidden = true;
+    glLink.hidden = true;
+  }
+
+  // Watch button
+  const watchBtn = $('#td-watch-btn');
+  watchBtn.textContent = watching ? '★ Watching' : '☆ Watch';
+  watchBtn.classList.toggle('btn-secondary', !watching);
+
+  // Meta info
+  $('#td-assignee').textContent = task.assignee_name ? `👤 ${task.assignee_name}` : '👤 Nicht zugewiesen';
+  $('#td-creator').textContent = task.creator_name ? `✏️ ${task.creator_name}` : '';
+  $('#td-due').textContent = task.due_date ? `📅 ${task.due_date}` : '';
+  const hoursText = [];
+  if (task.estimated_hours) hoursText.push(`⏱ geschätzt: ${task.estimated_hours}h`);
+  if (task.spent_hours) hoursText.push(`⏱ aufgewendet: ${task.spent_hours}h`);
+  $('#td-hours').textContent = hoursText.join(' · ');
+  $('#td-labels').innerHTML = (task.labels || []).map(l => `<span class="badge badge-todo">${l}</span>`).join(' ');
+
+  // Subtask progress
+  const subProgress = $('#td-subtask-progress');
+  if (task.subtask_count > 0) {
+    subProgress.hidden = false;
+    $('#td-subtask-count').textContent = `${task.subtask_done}/${task.subtask_count} erledigt`;
+    const pct = task.subtask_count > 0 ? (task.subtask_done / task.subtask_count) * 100 : 0;
+    $('#td-subtask-bar').style.width = `${pct}%`;
+    $('#td-subtask-badge').hidden = false;
+    $('#td-subtask-badge').textContent = `${task.subtask_done}/${task.subtask_count}`;
+  } else {
+    subProgress.hidden = true;
+    $('#td-subtask-badge').hidden = true;
+  }
+
+  // Edit form
+  $('#td-edit-title').value = task.title || '';
+  $('#td-edit-description').value = task.description || '';
+  $('#td-edit-status').value = task.status || 'todo';
+  $('#td-edit-priority').value = task.priority || 'normal';
+  $('#td-edit-type').value = task.issue_type || 'task';
+  $('#td-edit-due').value = task.due_date || '';
+  $('#td-edit-est').value = task.estimated_hours || '';
+  $('#td-edit-spent').value = task.spent_hours || '';
+  $('#td-edit-labels').value = (task.labels || []).join(', ');
+
+  // Tabs
+  $('#td-comment-count').textContent = String(comments.length);
+  renderTaskComments(comments);
+  renderTaskSubtasks(subtasks);
+  renderTaskHistory(history);
+  renderTaskWatchers(watchers);
+}
+
+function renderTaskComments(comments) {
+  const list = $('#td-comment-list');
+  list.innerHTML = '';
+  if (!comments.length) {
+    list.innerHTML = '<li><small style="color:var(--text-muted);">Noch keine Kommentare.</small></li>';
+    return;
+  }
+  for (const c of comments) {
+    const li = document.createElement('li');
+    li.style.cssText = 'padding:0.75rem; border:1px solid var(--border); border-radius:6px; margin-bottom:0.5rem;';
+    const date = new Date(c.created_at).toLocaleString('de-DE');
+    const isAuthor = state.user && Number(c.user_id) === Number(state.user.id);
+    const canDelete = isAuthor || (state.currentProject && ['admin', 'projektmanager'].includes(state.currentProject.my_role));
+    li.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.25rem;">
+        <strong>${c.author_name || 'Unbekannt'}</strong>
+        <small style="color:var(--text-muted);">${date}${c.updated_at !== c.created_at ? ' (bearbeitet)' : ''}</small>
+      </div>
+      <p id="td-comment-body-${c.id}" style="margin:0; white-space:pre-wrap;">${escapeHtml(c.body)}</p>
+      <div id="td-comment-edit-${c.id}" hidden>
+        <textarea id="td-comment-edit-ta-${c.id}" style="width:100%;">${escapeHtml(c.body)}</textarea>
+        <div style="display:flex; gap:0.5rem; margin-top:0.35rem;">
+          <button class="btn-small" onclick="saveCommentEdit(${c.id})">Speichern</button>
+          <button class="btn-small btn-secondary" onclick="cancelCommentEdit(${c.id})">Abbrechen</button>
+        </div>
+      </div>
+      ${isAuthor || canDelete ? `
+        <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
+          ${isAuthor ? `<button class="btn-small btn-secondary" onclick="editComment(${c.id})">✏️</button>` : ''}
+          ${canDelete ? `<button class="btn-small btn-secondary" onclick="deleteComment(${c.id})">🗑</button>` : ''}
+        </div>
+      ` : ''}
+    `;
+    list.appendChild(li);
+  }
+}
+
+function renderTaskSubtasks(subtasks) {
+  const list = $('#td-subtask-list');
+  list.innerHTML = '';
+  if (!subtasks.length) {
+    list.innerHTML = '<li><small style="color:var(--text-muted);">Keine Checklisten-Punkte.</small></li>';
+    return;
+  }
+  for (const s of subtasks) {
+    const li = document.createElement('li');
+    li.style.cssText = 'display:flex; align-items:center; gap:0.5rem; padding:0.5rem;';
+    li.innerHTML = `
+      <input type="checkbox" ${s.is_done ? 'checked' : ''} onchange="toggleSubtask(${s.id}, this.checked)">
+      <span style="flex:1; ${s.is_done ? 'text-decoration:line-through; color:var(--text-muted);' : ''}">${escapeHtml(s.title)}</span>
+      ${s.assignee_name ? `<small style="color:var(--text-muted);">${s.assignee_name}</small>` : ''}
+      <button class="btn-small btn-secondary" onclick="deleteSubtask(${s.id})">🗑</button>
+    `;
+    list.appendChild(li);
+  }
+}
+
+function renderTaskHistory(history) {
+  const list = $('#td-history-list');
+  list.innerHTML = '';
+  if (!history.length) {
+    list.innerHTML = '<li><small style="color:var(--text-muted);">Keine Historie vorhanden.</small></li>';
+    return;
+  }
+  const actionLabels = {
+    created: '✅ Erstellt',
+    updated: '✏️ Geändert',
+    deleted: '🗑 Gelöscht',
+    status_changed: '🔄 Status geändert',
+    assigned: '👤 Zugewiesen',
+    commented: '💬 Kommentiert',
+    subtask_toggled: '☑️ Subtask geändert',
+  };
+  const fieldLabels = {
+    title: 'Titel', description: 'Beschreibung', status: 'Status',
+    assignee_id: 'Bearbeiter', issue_type: 'Typ', priority: 'Priorität',
+    due_date: 'Fälligkeitsdatum', milestone_id: 'Meilenstein', epic_id: 'Epic',
+    estimated_hours: 'Geschätzte Zeit', spent_hours: 'Aufgewendete Zeit',
+    labels: 'Labels', subtask_added: 'Subtask hinzugefügt', subtask: 'Subtask',
+  };
+  for (const h of history) {
+    const li = document.createElement('li');
+    li.style.cssText = 'padding:0.5rem; border-left:3px solid var(--border); margin-bottom:0.35rem;';
+    const date = new Date(h.changed_at).toLocaleString('de-DE');
+    const actionLabel = actionLabels[h.action] || h.action;
+    let detail = '';
+    if (h.field) {
+      const fieldLabel = fieldLabels[h.field] || h.field;
+      const oldV = h.old_value !== null ? formatHistoryValue(h.old_value) : '—';
+      const newV = h.new_value !== null ? formatHistoryValue(h.new_value) : '—';
+      detail = `<br><small style="color:var(--text-muted);">${fieldLabel}: ${oldV} → ${newV}</small>`;
+    }
+    li.innerHTML = `<small style="color:var(--text-muted);">${date} · ${h.user_name || 'System'}</small> ${actionLabel}${detail}`;
+    list.appendChild(li);
+  }
+}
+
+function formatHistoryValue(v) {
+  if (v === null || v === undefined) return '—';
+  try {
+    const parsed = JSON.parse(v);
+    if (Array.isArray(parsed)) return parsed.join(', ') || '(leer)';
+  } catch { /* not JSON */ }
+  return String(v).slice(0, 50);
+}
+
+function renderTaskWatchers(watchers) {
+  const list = $('#td-watcher-list');
+  list.innerHTML = '';
+  if (!watchers.length) {
+    list.innerHTML = '<li><small style="color:var(--text-muted);">Keine Watcher.</small></li>';
+    return;
+  }
+  for (const w of watchers) {
+    const li = document.createElement('li');
+    const date = new Date(w.created_at).toLocaleDateString('de-DE');
+    const isMe = state.user && Number(w.id) === Number(state.user.id);
+    li.innerHTML = `<strong>${w.name}</strong> <small style="color:var(--text-muted);">@${w.username} · seit ${date}</small>${isMe ? ' <span class="badge badge-active">Du</span>' : ''}`;
+    list.appendChild(li);
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/* ===== TASK DETAIL TABS ===== */
+let tdCurrentTab = 'info';
+function setTaskDetailTab(tab) {
+  tdCurrentTab = tab;
+  const tabs = ['info', 'comments', 'subtasks', 'history', 'watchers'];
+  for (const t of tabs) {
+    $(`#td-tab-${t}`).hidden = t !== tab;
+    $(`#td-tab-${t}-btn`).classList.toggle('active', t === tab);
+  }
+}
+
+/* ===== TASK DETAIL EVENT HANDLERS ===== */
+
+function bindTaskDetailEvents() {
+  bind('#task-detail-back-btn', () => {
+    if (state.currentProject) loadProject(state.currentProject.id);
+    else loadDashboard();
+  });
+
+  bind('#td-watch-btn', async () => {
+    if (!state.currentTask) return;
+    const { task } = state.currentTask;
+    const pid = state.currentProject.id;
+    try {
+      if (state.currentTask.watching) {
+        await api(`/api/projects/${pid}/tasks/${task.id}/watch`, { method: 'DELETE' });
+      } else {
+        await api(`/api/projects/${pid}/tasks/${task.id}/watch`, { method: 'POST' });
+      }
+      await loadTaskDetail(pid, task.id);
+    } catch (err) { alert(err.message); }
+  });
+
+  // Tab buttons
+  bind('#td-tab-info-btn', () => setTaskDetailTab('info'));
+  bind('#td-tab-comments-btn', () => setTaskDetailTab('comments'));
+  bind('#td-tab-subtasks-btn', () => setTaskDetailTab('subtasks'));
+  bind('#td-tab-history-btn', () => setTaskDetailTab('history'));
+  bind('#td-tab-watchers-btn', () => setTaskDetailTab('watchers'));
+
+  // Edit form
+  bind('submit', async (e) => {
+    if (e.target.id === 'td-edit-form') {
+      e.preventDefault();
+      if (!state.currentTask || !state.currentProject) return;
+      const fd = new FormData(e.target);
+      const labels = (fd.get('labels') || '').split(',').map(s => s.trim()).filter(Boolean);
+      try {
+        await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}`, {
+          method: 'PUT',
+          body: {
+            title: fd.get('title'),
+            description: fd.get('description') || null,
+            status: fd.get('status'),
+            priority: fd.get('priority'),
+            issue_type: fd.get('issue_type'),
+            due_date: fd.get('due_date') || null,
+            estimated_hours: fd.get('estimated_hours') || null,
+            spent_hours: fd.get('spent_hours') || null,
+            labels,
+          },
+        });
+        $('#td-msg').textContent = '✅ Gespeichert';
+        setTimeout(() => { $('#td-msg').textContent = ''; }, 2000);
+        await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
+        await loadProject(state.currentProject.id);
+      } catch (err) { alert(err.message); }
+    }
+  });
+
+  // Delete task
+  bind('#td-delete-btn', async () => {
+    if (!state.currentTask || !state.currentProject) return;
+    if (!confirm('Task wirklich löschen?')) return;
+    try {
+      await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}`, { method: 'DELETE' });
+      await loadProject(state.currentProject.id);
+      show('project-detail-view');
+    } catch (err) { alert(err.message); }
+  });
+
+  // Comment form
+  bind('submit', async (e) => {
+    if (e.target.id === 'td-comment-form') {
+      e.preventDefault();
+      if (!state.currentTask || !state.currentProject) return;
+      const fd = new FormData(e.target);
+      try {
+        await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}/comments`, {
+          method: 'POST', body: { body: fd.get('body') },
+        });
+        e.target.reset();
+        await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
+      } catch (err) { alert(err.message); }
+    }
+  });
+
+  // Subtask form
+  bind('submit', async (e) => {
+    if (e.target.id === 'td-subtask-form') {
+      e.preventDefault();
+      if (!state.currentTask || !state.currentProject) return;
+      const fd = new FormData(e.target);
+      try {
+        await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}/subtasks`, {
+          method: 'POST', body: { title: fd.get('title') },
+        });
+        e.target.reset();
+        await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
+        await loadProject(state.currentProject.id);
+      } catch (err) { alert(err.message); }
+    }
+  });
+}
+
+/* ===== COMMENT ACTIONS (global for onclick) ===== */
+window.editComment = function(commentId) {
+  $(`#td-comment-body-${commentId}`).hidden = true;
+  $(`#td-comment-edit-${commentId}`).hidden = false;
+};
+
+window.cancelCommentEdit = function(commentId) {
+  $(`#td-comment-body-${commentId}`).hidden = false;
+  $(`#td-comment-edit-${commentId}`).hidden = true;
+};
+
+window.saveCommentEdit = async function(commentId) {
+  if (!state.currentTask || !state.currentProject) return;
+  const body = $(`#td-comment-edit-ta-${commentId}`).value;
+  try {
+    await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}/comments/${commentId}`, {
+      method: 'PUT', body: { body },
+    });
+    await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
+  } catch (err) { alert(err.message); }
+};
+
+window.deleteComment = async function(commentId) {
+  if (!confirm('Kommentar löschen?')) return;
+  if (!state.currentTask || !state.currentProject) return;
+  try {
+    await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}/comments/${commentId}`, { method: 'DELETE' });
+    await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
+  } catch (err) { alert(err.message); }
+};
+
+/* ===== SUBTASK ACTIONS (global for onchange/onclick) ===== */
+window.toggleSubtask = async function(subtaskId, isDone) {
+  if (!state.currentTask || !state.currentProject) return;
+  try {
+    await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}/subtasks/${subtaskId}`, {
+      method: 'PUT', body: { is_done: isDone },
+    });
+    await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
+    await loadProject(state.currentProject.id);
+  } catch (err) { alert(err.message); }
+};
+
+window.deleteSubtask = async function(subtaskId) {
+  if (!confirm('Checklisten-Punkt löschen?')) return;
+  if (!state.currentTask || !state.currentProject) return;
+  try {
+    await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}/subtasks/${subtaskId}`, { method: 'DELETE' });
+    await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
+    await loadProject(state.currentProject.id);
+  } catch (err) { alert(err.message); }
+};
+
+/* ===== MAKE TASKS CLICKABLE (open detail) ===== */
+function makeTasksClickable() {
+  // Task list items
+  document.querySelectorAll('#task-list li').forEach((li, idx) => {
+    if (!li.dataset.taskId) return;
+    li.style.cursor = 'pointer';
+    li.addEventListener('click', (e) => {
+      // Don't open detail when interacting with select
+      if (e.target.tagName === 'SELECT' || e.target.tagName === 'OPTION') return;
+      const taskId = Number(li.dataset.taskId);
+      if (taskId && state.currentProject) loadTaskDetail(state.currentProject.id, taskId);
+    });
+  });
+  // Board cards
+  document.querySelectorAll('.board-card').forEach(card => {
+    if (!card.dataset.taskId) return;
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', (e) => {
+      if (card.classList.contains('dragging')) return;
+      const taskId = Number(card.dataset.taskId);
+      if (taskId && state.currentProject) loadTaskDetail(state.currentProject.id, taskId);
+    });
+  });
+}
+
+/* ===== PRIORITY IN TASK FORM (US-25) ===== */
+function enhanceTaskForm() {
+  const form = $('#task-form');
+  if (!form || form.dataset.enhanced) return;
+  form.dataset.enhanced = '1';
+  // Add priority select after issue_type select
+  const typeSelect = form.querySelector('select[name="issue_type"]');
+  if (typeSelect) {
+    const priorityLabel = document.createElement('select');
+    priorityLabel.name = 'priority';
+    priorityLabel.innerHTML = `
+      <option value="normal">Normal</option>
+      <option value="low">Niedrig</option>
+      <option value="high">Hoch</option>
+      <option value="critical">Kritisch</option>
+    `;
+    typeSelect.parentNode.insertBefore(priorityLabel, typeSelect.nextSibling);
+  }
+}
+
+/* ===== INIT TASK DETAIL EVENTS ===== */
+const _origInit = init;
+init = async function() {
+  await _origInit();
+  bindTaskDetailEvents();
+};
+
+/* ===== HOOK INTO renderTaskList TO ADD data-task-id ===== */
+const _origRenderTaskList = renderTaskList;
+renderTaskList = function(tasks, readonly, projectId) {
+  _origRenderTaskList(tasks, readonly, projectId);
+  const list = $('#task-list');
+  const items = list.querySelectorAll('li');
+  tasks.forEach((t, idx) => {
+    if (items[idx]) items[idx].dataset.taskId = t.id;
+  });
+  makeTasksClickable();
+};
+
+const _origRenderBoard = renderBoard;
+renderBoard = function(tasks, readonly, projectId) {
+  _origRenderBoard(tasks, readonly, projectId);
+  document.querySelectorAll('.board-card').forEach((card, idx) => {
+    const visible = tasks;
+    // Find the task for this card by matching order
+  });
+  // Add task IDs to board cards
+  for (const status of ['todo', 'in_progress', 'review', 'done']) {
+    const col = $(`#col-${status}`);
+    const cards = col.querySelectorAll('.board-card');
+    const statusTasks = tasks.filter(t => t.status === status);
+    cards.forEach((card, idx) => {
+      if (statusTasks[idx]) card.dataset.taskId = statusTasks[idx].id;
+    });
+  }
+  makeTasksClickable();
+};
+
+/* ===== HOOK INTO TASK FORM SUBMIT TO SEND PRIORITY ===== */
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'task-form') {
+    // Let the original handler run, but we need to intercept to add priority
+    // The original handler is bound separately, so we just enhance the form
+    enhanceTaskForm();
+  }
+});

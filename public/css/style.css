@@ -778,3 +778,143 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   flex-wrap: wrap;
   gap: 0.75rem;
 }
+
+/* ===== Epic 6: Aufgabenmanagement ===== */
+
+/* Priority badges */
+.badge-priority-low { background: var(--badge-todo-bg); color: var(--badge-todo-text); }
+.badge-priority-normal { background: var(--badge-active-bg); color: var(--badge-active-text); }
+.badge-priority-high { background: var(--badge-review-bg); color: var(--badge-review-text); }
+.badge-priority-critical { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+/* Task detail view */
+#task-detail-view {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+#task-detail-view .td-tab-content {
+  min-height: 200px;
+}
+
+.td-tab-content {
+  padding: 1rem 0;
+}
+
+/* Comment thread */
+#td-comment-list li {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+
+#td-comment-list li:hover {
+  border-color: var(--accent);
+}
+
+/* History timeline */
+#td-history-list li {
+  background: var(--bg-card);
+  border-radius: 4px;
+  border-left: 3px solid var(--accent);
+}
+
+/* Subtask list */
+#td-subtask-list li {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+#td-subtask-list li:hover {
+  border-color: var(--accent);
+}
+
+#td-subtask-list input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* Watcher list */
+#td-watcher-list li {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 0.35rem;
+}
+
+/* Watch button active state */
+#td-watch-btn {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+}
+
+#td-watch-btn:not(.btn-secondary) {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+/* Subtask progress bar */
+#td-subtask-progress {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+/* Small buttons */
+.btn-small {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.btn-small:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Task list items clickable */
+#task-list li[data-task-id] {
+  transition: background 0.15s, transform 0.15s;
+}
+
+#task-list li[data-task-id]:hover {
+  background: var(--bg-card-hover, rgba(255,255,255,0.03));
+  transform: translateX(2px);
+}
+
+/* Board cards clickable */
+.board-card[data-task-id] {
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.board-card[data-task-id]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Edit form in task detail */
+#td-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+#td-edit-form input,
+#td-edit-form select,
+#td-edit-form textarea {
+  font-size: 0.9rem;
+}
