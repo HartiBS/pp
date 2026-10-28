@@ -32,14 +32,28 @@ function avatarInitials(name) {
 }
 
 async function api(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const isWrite = options.method && !['GET', 'HEAD', 'OPTIONS'].includes(options.method.toUpperCase());
+  if (isWrite && state.csrfToken) {
+    headers['X-CSRF-Token'] = state.csrfToken;
+  }
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Fehler');
   return data;
+}
+
+async function fetchCsrfToken() {
+  try {
+    const { csrfToken } = await api('/api/csrf-token');
+    state.csrfToken = csrfToken;
+  } catch (err) {
+    console.error('CSRF-Token konnte nicht geladen werden:', err.message);
+  }
 }
 
 function setUser(user) {
@@ -66,6 +80,7 @@ function show(viewId) {
 
 async function init() {
   initTheme();
+  await fetchCsrfToken();
   try {
     const { user } = await api('/api/auth/me');
     setUser(user);

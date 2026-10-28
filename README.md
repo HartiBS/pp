@@ -155,6 +155,14 @@ Die App kann Issues direkt mit einer GitLab-Instanz synchronisieren:
 
 Rechte: Erstellen/Bearbeiten/Kommentieren erfordert mindestens die projektbezogene Rolle **Entwickler**; Lesen genügt **Beobachter**. Der GitLab-Token wird nur serverseitig verwendet und nie an das Frontend ausgeliefert.
 
+## Sicherheit
+
+- **CSRF-Schutz**: Alle zustandsändernden API-Requests (`POST`/`PUT`/`DELETE`/`PATCH`) erfordern ein gültiges CSRF-Token. Das Token wird pro Session generiert (`src/middleware/csrf.js`), über `GET /api/csrf-token` ausgeliefert und vom Frontend im Header `X-CSRF-Token` mitgesendet (Alternativ: `_csrf` im Body). Der Vergleich erfolgt timing-sicher (`crypto.timingSafeEqual`). `GET`/`HEAD`/`OPTIONS` sind ausgenommen.
+- Session-Cookie: `httpOnly`, `sameSite: lax`
+- Passwörter: bcrypt (Cost 10)
+- GitLab-Token: nur serverseitig in der DB, nie an das Frontend ausgeliefert
+- SQL: ausschließlich parametrisierte Queries
+
 ## Projektstruktur
 
 ```
