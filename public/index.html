@@ -24,6 +24,16 @@
       <div id="user-box" hidden>
         <div class="user-avatar" id="user-avatar"></div>
         <span id="user-name"></span>
+        <div class="notif-wrapper">
+          <button id="notif-btn" class="btn-secondary" title="Benachrichtigungen">🔔<span id="notif-badge" class="notif-badge" hidden></span></button>
+          <div id="notif-dropdown" class="notif-dropdown" hidden>
+            <div class="notif-header">
+              <strong>Benachrichtigungen</strong>
+              <button id="notif-read-all" type="button" class="btn-secondary">Alle gelesen</button>
+            </div>
+            <ul id="notif-list"></ul>
+          </div>
+        </div>
         <button id="profile-btn" class="btn-secondary">Profil</button>
         <button id="admin-btn" class="btn-secondary" hidden>Benutzerverwaltung</button>
         <button id="logout-btn">Abmelden</button>
@@ -133,6 +143,21 @@
       <p id="gitlab-settings-msg"></p>
     </section>
 
+    <section id="gitlab-projects-view" hidden>
+      <button id="gitlab-projects-back-btn">← Zurück</button>
+      <h2>GitLab-Projekte & Gruppen</h2>
+      <div style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+        <input type="text" id="gitlab-search-input" placeholder="GitLab-Projekte/Gruppen suchen..." style="flex:1; max-width:400px;">
+        <button id="gitlab-search-btn">Suchen</button>
+      </div>
+      <div id="gitlab-groups-block" hidden>
+        <h3>Gruppen</h3>
+        <ul id="gitlab-group-list" class="dash-list"></ul>
+      </div>
+      <h3>Projekte</h3>
+      <ul id="gitlab-project-list" class="dash-list"></ul>
+    </section>
+
     <section id="project-detail-view" hidden>
       <button id="back-btn">← Zurück</button>
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem;">
@@ -232,6 +257,12 @@
           </select>
           <input type="text" name="labels" placeholder="Labels (kommagetrennt)">
           <input type="date" name="due_date">
+          <select name="assignee_id" id="task-assignee-select">
+            <option value="">Mir zuweisen</option>
+          </select>
+          <select name="milestone_id" id="task-milestone-select" hidden>
+            <option value="">Kein Meilenstein</option>
+          </select>
           <button type="submit">+ Hinzufügen</button>
         </form>
         <ul id="task-list"></ul>
@@ -269,8 +300,13 @@
             <input type="number" name="gitlab_project_id" id="gitlab-project-id-input" placeholder="z. B. 42" style="width:120px;">
           </label>
           <button type="submit">Verknüpfen</button>
+          <button type="button" id="pick-gitlab-project-btn" class="btn-secondary">Aus GitLab wählen</button>
           <button type="button" id="sync-gitlab-btn" class="btn-secondary">Synchronisieren</button>
         </form>
+        <div id="milestone-block" style="margin-top:1rem;" hidden>
+          <h4>Meilensteine <button type="button" id="sync-milestones-btn" class="btn-secondary">Synchronisieren</button></h4>
+          <ul id="milestone-list" class="dash-list"></ul>
+        </div>
         <form id="gitlab-issue-form" hidden>
           <input type="text" name="title" placeholder="Issue-Titel" required>
           <textarea name="description" placeholder="Beschreibung (optional)"></textarea>

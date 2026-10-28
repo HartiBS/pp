@@ -7,7 +7,9 @@ const authRoutes = require('./routes/auth');
 const projectRoutes = require('./routes/projects');
 const adminRoutes = require('./routes/admin');
 const gitlabRoutes = require('./routes/gitlab');
+const notificationRoutes = require('./routes/notifications');
 const { loadUser } = require('./middleware/auth');
+const { generateCsrfToken, requireCsrf } = require('./middleware/csrf');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -27,6 +29,13 @@ app.use(session({
 }));
 
 app.use(loadUser);
+app.use(generateCsrfToken);
+
+app.get('/api/csrf-token', (req, res) => {
+  res.json({ csrfToken: req.session.csrfToken });
+});
+
+app.use('/api', requireCsrf);
 
 app.use(express.static(path.join(__dirname, '..', 'public'), {
   etag: false,
@@ -40,6 +49,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/gitlab', gitlabRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 

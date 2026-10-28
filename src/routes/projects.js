@@ -2,6 +2,7 @@ const express = require('express');
 const db = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { loadProjectRole, requireProjectPermission, PROJECT_ROLES } = require('../utils/permissions');
+const notifications = require('../utils/notifications');
 
 const router = express.Router();
 
@@ -125,25 +126,35 @@ router.delete('/:id', loadProjectRole, requireProjectPermission('delete_project'
 });
 
 router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task'), async (req, res) => {
-  const { title, description, issue_type, labels, due_date, epic_id } = req.body;
+  const { title, description, issue_type, labels, due_date, epic_id, assignee_id, milestone_id } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Titel ist erforderlich' });
   }
+  const finalAssignee = assignee_id || req.session.userId;
   try {
     const { rows } = await db.query(
-      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id, milestone_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         req.params.id,
         title,
         description || null,
-        req.session.userId,
+        finalAssignee,
         issue_type || 'task',
         Array.isArray(labels) ? labels : [],
         due_date || null,
         epic_id || null,
+        milestone_id || null,
       ]
     );
+    if (finalAssignee && Number(finalAssignee) !== Number(req.session.userId)) {
+      await notifications.notifyAssignment({
+        taskTitle: title,
+        projectId: req.params.id,
+        assigneeId: finalAssignee,
+        actorName: req.currentUser.name,
+      });
+    }
     res.status(201).json({ task: rows[0] });
   } catch (err) {
     console.error(err);
@@ -152,8 +163,16 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
 });
 
 router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
-  const { title, description, status, assignee_id, issue_type, labels, due_date, epic_id } = req.body;
+  const { title, description, status, assignee_id, issue_type, labels, due_date, epic_id, milestone_id } = req.body;
   try {
+    const prev = await db.query(
+      'SELECT status, assignee_id, title FROM tasks WHERE id = $1 AND project_id = $2',
+      [req.params.taskId, req.params.id]
+    );
+    const oldStatus = prev.rows[0] ? prev.rows[0].status : null;
+    const oldAssignee = prev.rows[0] ? prev.rows[0].assignee_id : null;
+    const taskTitle = (title || (prev.rows[0] && prev.rows[0].title)) || 'Task';
+
     const { rows } = await db.query(
       `UPDATE tasks
        SET title = COALESCE($1, title),
@@ -164,16 +183,41 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
            labels = COALESCE($6, labels),
            due_date = COALESCE($7, due_date),
            epic_id = COALESCE($8, epic_id),
+           milestone_id = COALESCE($9, milestone_id),
            updated_at = NOW()
-       WHERE id = $9 AND project_id = $10
+       WHERE id = $10 AND project_id = $11
        RETURNING *`,
       [title, description, status, assignee_id, issue_type,
        labels !== undefined ? (Array.isArray(labels) ? labels : []) : null,
-       due_date, epic_id, req.params.taskId, req.params.id]
+       due_date, epic_id, milestone_id, req.params.taskId, req.params.id]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Task nicht gefunden' });
     }
+
+    if (assignee_id && Number(assignee_id) !== Number(oldAssignee)) {
+      await notifications.notifyAssignment({
+        taskTitle,
+        projectId: req.params.id,
+        assigneeId: assignee_id,
+        actorName: req.currentUser.name,
+      });
+    }
+    if (status && oldStatus && status !== oldStatus) {
+      const notifyTarget = assignee_id || oldAssignee;
+      if (notifyTarget) {
+        await notifications.notifyStatusChange({
+          taskTitle,
+          projectId: req.params.id,
+          oldStatus,
+          newStatus: status,
+          assigneeId: notifyTarget,
+          actorName: req.currentUser.name,
+          actorId: req.session.userId,
+        });
+      }
+    }
+
     res.json({ task: rows[0] });
   } catch (err) {
     console.error(err);
