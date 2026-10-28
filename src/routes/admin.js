@@ -24,13 +24,16 @@ router.get('/users', async (req, res) => {
 
 router.post('/users', async (req, res) => {
   const { email, password, firstName, lastName, username, role } = req.body;
-  if (!email || !password || !firstName || !username) {
-    return res.status(400).json({ error: 'E-Mail, Passwort, Vorname und Benutzername sind erforderlich' });
+  if (!username || !password || !role) {
+    return res.status(400).json({ error: 'Benutzername, Passwort und Rolle sind erforderlich' });
+  }
+  if (!email || !firstName) {
+    return res.status(400).json({ error: 'E-Mail und Vorname sind ebenfalls erforderlich' });
   }
   if (!/^[a-zA-Z0-9_.-]{3,50}$/.test(username)) {
     return res.status(400).json({ error: 'Benutzername: 3-50 Zeichen (Buchstaben, Zahlen, _ . -)' });
   }
-  if (role && !ROLES.includes(role)) {
+  if (!ROLES.includes(role)) {
     return res.status(400).json({ error: `Ungültige Rolle. Erlaubt: ${ROLES.join(', ')}` });
   }
   const name = [firstName, lastName].filter(Boolean).join(' ');
@@ -40,7 +43,7 @@ router.post('/users', async (req, res) => {
     const { rows } = await db.query(
       `INSERT INTO users (email, password_hash, name, first_name, last_name, username, role)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${USER_FIELDS}`,
-      [email, hash, name, firstName, lastName || null, username, role || 'entwickler']
+      [email, hash, name, firstName, lastName || null, username, role]
     );
     res.status(201).json({ user: rows[0] });
   } catch (err) {

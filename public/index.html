@@ -113,7 +113,8 @@
         <label>E-Mail <input type="email" name="email" required></label>
         <label>Passwort <input type="password" name="password" placeholder="(beim Bearbeiten leer lassen)"></label>
         <label>Rolle
-          <select name="role">
+          <select name="role" id="user-role-select" required>
+            <option value="" disabled selected>— Rolle wählen —</option>
             <option value="admin">Admin</option>
             <option value="projektmanager">Projektmanager</option>
             <option value="entwickler">Entwickler</option>
@@ -263,6 +264,9 @@
           <select name="milestone_id" id="task-milestone-select" hidden>
             <option value="">Kein Meilenstein</option>
           </select>
+          <label id="push-gitlab-label" hidden style="flex-direction:row; align-items:center; gap:0.35rem; font-size:0.875rem;">
+            <input type="checkbox" name="push_to_gitlab"> Auch in GitLab anlegen
+          </label>
           <button type="submit">+ Hinzufügen</button>
         </form>
         <ul id="task-list"></ul>
@@ -332,8 +336,17 @@
       <div style="display:flex; gap:0.75rem; margin-bottom:1.5rem;">
         <button id="gi-close-btn">Schließen</button>
         <button id="gi-reopen-btn" class="btn-secondary" hidden>Wiedereröffnen</button>
+        <button id="gi-edit-btn" class="btn-secondary">Bearbeiten</button>
         <a id="gi-web-link" href="#" target="_blank" rel="noopener" style="align-self:center;">In GitLab öffnen ↗</a>
       </div>
+      <form id="gi-edit-form" hidden>
+        <label>Titel <input type="text" name="title" required></label>
+        <label>Beschreibung <textarea name="description"></textarea></label>
+        <div style="display:flex; gap:0.75rem;">
+          <button type="submit">In GitLab speichern</button>
+          <button type="button" id="gi-edit-cancel-btn" class="btn-secondary">Abbrechen</button>
+        </div>
+      </form>
       <h3>Kommentare</h3>
       <ul id="gi-comment-list"></ul>
       <form id="gi-comment-form">

@@ -3,6 +3,7 @@ const db = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { loadProjectRole, requireProjectPermission, PROJECT_ROLES } = require('../utils/permissions');
 const notifications = require('../utils/notifications');
+const gitlab = require('../utils/gitlab');
 
 const router = express.Router();
 
@@ -126,15 +127,37 @@ router.delete('/:id', loadProjectRole, requireProjectPermission('delete_project'
 });
 
 router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task'), async (req, res) => {
-  const { title, description, issue_type, labels, due_date, epic_id, assignee_id, milestone_id } = req.body;
+  const { title, description, issue_type, labels, due_date, epic_id, assignee_id, milestone_id, push_to_gitlab } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Titel ist erforderlich' });
   }
   const finalAssignee = assignee_id || req.session.userId;
   try {
+    const { rows: projectRows } = await db.query(
+      'SELECT gitlab_project_id FROM projects WHERE id = $1',
+      [req.params.id]
+    );
+    const gitlabProjectId = projectRows[0] ? projectRows[0].gitlab_project_id : null;
+
+    let gitlabIid = null;
+    // #57: Task direkt als GitLab-Issue anlegen (wenn verknüpft und gewünscht)
+    if (push_to_gitlab && gitlabProjectId) {
+      try {
+        const created = await gitlab.createGitLabIssue(gitlabProjectId, { title, description });
+        gitlabIid = created.gitlab_iid;
+        await db.query(
+          `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [req.params.id, created.gitlab_iid, created.title, created.description, created.state, created.web_url]
+        );
+      } catch (gitlabErr) {
+        console.error('GitLab-Push fehlgeschlagen (Task-Anlegen):', gitlabErr.message);
+      }
+    }
+
     const { rows } = await db.query(
-      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id, milestone_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, gitlab_iid)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [
         req.params.id,
         title,
@@ -145,6 +168,7 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
         due_date || null,
         epic_id || null,
         milestone_id || null,
+        gitlabIid,
       ]
     );
     if (finalAssignee && Number(finalAssignee) !== Number(req.session.userId)) {
@@ -166,12 +190,16 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
   const { title, description, status, assignee_id, issue_type, labels, due_date, epic_id, milestone_id } = req.body;
   try {
     const prev = await db.query(
-      'SELECT status, assignee_id, title FROM tasks WHERE id = $1 AND project_id = $2',
+      `SELECT t.status, t.assignee_id, t.title, t.gitlab_iid, p.gitlab_project_id
+       FROM tasks t JOIN projects p ON p.id = t.project_id
+       WHERE t.id = $1 AND t.project_id = $2`,
       [req.params.taskId, req.params.id]
     );
     const oldStatus = prev.rows[0] ? prev.rows[0].status : null;
     const oldAssignee = prev.rows[0] ? prev.rows[0].assignee_id : null;
     const taskTitle = (title || (prev.rows[0] && prev.rows[0].title)) || 'Task';
+    const gitlabIid = prev.rows[0] ? prev.rows[0].gitlab_iid : null;
+    const gitlabProjectId = prev.rows[0] ? prev.rows[0].gitlab_project_id : null;
 
     const { rows } = await db.query(
       `UPDATE tasks
@@ -193,6 +221,31 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Task nicht gefunden' });
+    }
+
+    // #57: Änderungen an verknüpfte GitLab-Issues pushen
+    if (gitlabIid && gitlabProjectId) {
+      const gitlabUpdate = {};
+      if (title) gitlabUpdate.title = title;
+      if (description !== undefined) gitlabUpdate.description = description;
+      if (status && status !== oldStatus) {
+        gitlabUpdate.state_event = status === 'done' ? 'close' : 'reopen';
+      }
+      if (Object.keys(gitlabUpdate).length > 0) {
+        try {
+          const updated = await gitlab.updateGitLabIssue(gitlabProjectId, gitlabIid, gitlabUpdate);
+          await db.query(
+            `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())
+             ON CONFLICT (project_id, gitlab_iid) DO UPDATE
+             SET title = EXCLUDED.title, description = EXCLUDED.description,
+                 state = EXCLUDED.state, synced_at = NOW()`,
+            [req.params.id, gitlabIid, updated.title, updated.description, updated.state, updated.web_url]
+          );
+        } catch (gitlabErr) {
+          console.error('GitLab-Push fehlgeschlagen (Task-Update):', gitlabErr.message);
+        }
+      }
     }
 
     if (assignee_id && Number(assignee_id) !== Number(oldAssignee)) {

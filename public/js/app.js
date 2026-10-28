@@ -306,7 +306,8 @@ function renderTaskList(tasks, readonly, projectId) {
     const labelsHtml = (t.labels || []).map(l => `<span class="badge badge-todo" style="margin-right:0.25rem;">${l}</span>`).join('');
     const dueHtml = t.due_date ? ` <small>📅 ${t.due_date}</small>` : '';
     const typeBadge = `<span class="badge">${ISSUE_TYPE_LABELS[t.issue_type] || t.issue_type}</span>`;
-    li.innerHTML = `<span>${typeBadge} ${t.title}${t.assignee_name ? ` <small>(${t.assignee_name})</small>` : ''}${dueHtml}<br>${labelsHtml}</span>`;
+    const gitlabBadge = t.gitlab_iid ? ` <span class="badge badge-active" title="Mit GitLab synchronisiert">GL #${t.gitlab_iid}</span>` : '';
+    li.innerHTML = `<span>${typeBadge}${gitlabBadge} ${t.title}${t.assignee_name ? ` <small>(${t.assignee_name})</small>` : ''}${dueHtml}<br>${labelsHtml}</span>`;
     if (!readonly) {
       const select = document.createElement('select');
       for (const s of ['todo', 'in_progress', 'review', 'done']) {
@@ -588,6 +589,12 @@ async function loadProject(id) {
   $('#gitlab-project-id-input').value = project.gitlab_project_id || '';
   $('#sync-gitlab-btn').disabled = !project.gitlab_project_id;
   $('#new-gitlab-issue-btn').hidden = readonly || !project.gitlab_project_id;
+  $('#push-gitlab-label').hidden = !project.gitlab_project_id;
+
+  // #56: Beim Öffnen automatisch mit GitLab synchronisieren (falls verknüpft)
+  if (project.gitlab_project_id) {
+    syncGitLabIssues(id, true);
+  }
   loadGitLabIssues(id);
 
   state.allTasks = tasks;
@@ -641,6 +648,26 @@ function renderGitLabIssues(issues) {
   }
 }
 
+async function syncGitLabIssues(projectId, silent = false) {
+  const btn = $('#sync-gitlab-btn');
+  if (btn && !silent) {
+    btn.disabled = true;
+    btn.textContent = 'Synchronisiere...';
+  }
+  try {
+    const { issues } = await api(`/api/gitlab/projects/${projectId}/sync`, { method: 'POST' });
+    renderGitLabIssues(issues);
+  } catch (err) {
+    if (!silent) alert(err.message);
+    else console.warn('Auto-Sync fehlgeschlagen:', err.message);
+  } finally {
+    if (btn && !silent) {
+      btn.disabled = false;
+      btn.textContent = 'Synchronisieren';
+    }
+  }
+}
+
 async function loadGitLabIssues(projectId) {
   try {
     const { issues } = await api(`/api/gitlab/projects/${projectId}/issues`);
@@ -665,8 +692,10 @@ async function loadGitLabSettings() {
 
 async function loadGitLabIssue(issue) {
   state.currentGitLabIssue = issue;
+  $('#gi-edit-form').hidden = true;
   $('#gi-title').textContent = `#${issue.gitlab_iid} ${issue.title}`;
   $('#gi-description').textContent = issue.description || '(keine Beschreibung)';
+  $('#gi-edit-btn').hidden = !canEdit(state.myProjectRole);
   const stateBadge = $('#gi-state');
   stateBadge.textContent = issue.state === 'opened' ? 'offen' : 'geschlossen';
   stateBadge.className = `badge ${issue.state === 'opened' ? 'badge-active' : 'badge-done'}`;
@@ -747,6 +776,7 @@ function editUser(u) {
   form.username.value = u.username || '';
   form.email.value = u.email;
   form.role.value = u.role;
+  $('#user-role-select').required = true;
   form.is_active.checked = u.is_active;
   form.password.value = '';
   form.password.required = false;
@@ -867,6 +897,8 @@ bind('#new-user-btn', () => {
   form.reset();
   form.id.value = '';
   form.password.required = true;
+  $('#user-role-select').required = true;
+  $('#user-role-select').value = '';
   form.hidden = false;
 });
 bind('#cancel-user-btn', () => { $('#user-form').hidden = true; });
@@ -920,6 +952,7 @@ document.addEventListener('submit', async (e) => {
       due_date: fd.get('due_date') || null,
       assignee_id: fd.get('assignee_id') || null,
       milestone_id: fd.get('milestone_id') || null,
+      push_to_gitlab: fd.get('push_to_gitlab') === 'on',
     };
     await api(`/api/projects/${state.currentProject.id}/tasks`, { method: 'POST', body });
     e.target.reset();
@@ -978,25 +1011,40 @@ bind('#test-gitlab-btn', async () => {
   }
 });
 
-bind('#sync-gitlab-btn', async () => {
-  const btn = $('#sync-gitlab-btn');
-  btn.disabled = true;
-  btn.textContent = 'Synchronisiere...';
-  try {
-    const { issues } = await api(`/api/gitlab/projects/${state.currentProject.id}/sync`, { method: 'POST' });
-    renderGitLabIssues(issues);
-  } catch (err) {
-    alert(err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Synchronisieren';
-  }
-});
+bind('#sync-gitlab-btn', () => syncGitLabIssues(state.currentProject.id));
 
 bind('#new-gitlab-issue-btn', () => { $('#gitlab-issue-form').hidden = false; });
 bind('#cancel-gitlab-issue-btn', () => { $('#gitlab-issue-form').hidden = true; });
 
 bind('#gitlab-issue-back-btn', () => loadProject(state.currentProject.id));
+
+bind('#gi-edit-btn', () => {
+  const issue = state.currentGitLabIssue;
+  const form = $('#gi-edit-form');
+  form.title.value = issue.title || '';
+  form.description.value = issue.description || '';
+  form.hidden = false;
+});
+bind('#gi-edit-cancel-btn', () => { $('#gi-edit-form').hidden = true; });
+
+document.addEventListener('submit', async (e) => {
+  if (e.target.id === 'gi-edit-form') {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const issue = state.currentGitLabIssue;
+    try {
+      const { issue: updated } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
+        method: 'PUT',
+        body: { title: fd.get('title'), description: fd.get('description') },
+      });
+      $('#gi-edit-form').hidden = true;
+      await loadGitLabIssue(updated);
+      await loadGitLabIssues(state.currentProject.id);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+});
 
 bind('#gi-close-btn', async () => {
   const issue = state.currentGitLabIssue;
