@@ -9,6 +9,7 @@ const taskWatchers = require('../utils/taskWatchers');
 const taskComments = require('../utils/taskComments');
 const taskSubtasks = require('../utils/taskSubtasks');
 const customFields = require('../utils/customFields');
+const taskMarkdown = require('../utils/taskMarkdown');
 
 const router = express.Router();
 
@@ -146,22 +147,6 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
     );
     const gitlabProjectId = projectRows[0] ? projectRows[0].gitlab_project_id : null;
 
-    let gitlabIid = null;
-    // #57: Task direkt als GitLab-Issue anlegen (wenn verknüpft und gewünscht)
-    if (push_to_gitlab && gitlabProjectId) {
-      try {
-        const created = await gitlab.createGitLabIssue(gitlabProjectId, { title, description });
-        gitlabIid = created.gitlab_iid;
-        await db.query(
-          `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-          [req.params.id, created.gitlab_iid, created.title, created.description, created.state, created.web_url]
-        );
-      } catch (gitlabErr) {
-        console.error('GitLab-Push fehlgeschlagen (Task-Anlegen):', gitlabErr.message);
-      }
-    }
-
     const estHours = estimated_hours !== undefined && estimated_hours !== null && estimated_hours !== ''
       ? Number(estimated_hours) : null;
     if (estHours !== null && (isNaN(estHours) || estHours < 0)) {
@@ -176,6 +161,34 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
         return res.status(400).json({ error: cfResult.error });
       }
       cleanedCustomFields = cfResult.cleaned;
+    }
+
+    let gitlabIid = null;
+    // #57: Task direkt als GitLab-Issue anlegen (wenn verknüpft und gewünscht)
+    if (push_to_gitlab && gitlabProjectId) {
+      try {
+        // #72: Task als Markdown für GitLab serialisieren
+        const activeCfDefs = await customFields.getProjectFieldDefinitions(req.params.id);
+        const mdDescription = taskMarkdown.taskToMarkdown(
+          {
+            title, description: description || '', status: 'todo',
+            priority: taskPriority, issue_type: issue_type || 'task',
+            labels: Array.isArray(labels) ? labels : [],
+            due_date: due_date || null, estimated_hours: estHours, spent_hours: 0,
+            custom_fields: cleanedCustomFields,
+          },
+          { customFieldDefs: activeCfDefs, subtasks: [] }
+        );
+        const created = await gitlab.createGitLabIssue(gitlabProjectId, { title, description: mdDescription });
+        gitlabIid = created.gitlab_iid;
+        await db.query(
+          `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [req.params.id, created.gitlab_iid, created.title, created.description, created.state, created.web_url]
+        );
+      } catch (gitlabErr) {
+        console.error('GitLab-Push fehlgeschlagen (Task-Anlegen):', gitlabErr.message);
+      }
     }
 
     const { rows } = await db.query(
@@ -312,7 +325,15 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
     if (gitlabIid && gitlabProjectId) {
       const gitlabUpdate = {};
       if (title) gitlabUpdate.title = title;
-      if (description !== undefined) gitlabUpdate.description = description;
+      // #72: Beschreibung als Markdown serialisieren (strukturierte Felder eingebettet)
+      if (description !== undefined || status !== undefined || priority !== undefined ||
+          estimated_hours !== undefined || spent_hours !== undefined || custom_fields !== undefined) {
+        const activeCfDefs = await customFields.getProjectFieldDefinitions(req.params.id);
+        const subtasks = await taskSubtasks.getSubtasks(updatedTask.id);
+        gitlabUpdate.description = taskMarkdown.taskToMarkdown(updatedTask, {
+          customFieldDefs: activeCfDefs, subtasks,
+        });
+      }
       if (status && status !== oldStatus) {
         gitlabUpdate.state_event = status === 'done' ? 'close' : 'reopen';
       }

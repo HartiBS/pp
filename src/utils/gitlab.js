@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const taskMarkdown = require('./taskMarkdown');
 const { version } = require('../../package.json');
 
 async function getSettings() {
@@ -115,6 +116,56 @@ async function syncProjectIssues(projectId, gitlabProjectId) {
     'SELECT * FROM gitlab_issues WHERE project_id = $1 ORDER BY synced_at DESC',
     [projectId]
   );
+
+  // #72: GitLab-Issues mit pp-meta in lokale Tasks zurückführen (Pull-Richtung)
+  for (const issue of rows) {
+    const parsed = taskMarkdown.markdownToTaskFields(issue.description || '');
+    if (parsed.meta) {
+      // Task mit diesem gitlab_iid suchen und aktualisieren
+      const taskResult = await db.query(
+        'SELECT id FROM tasks WHERE gitlab_iid = $1 AND project_id = $2',
+        [issue.gitlab_iid, projectId]
+      );
+      if (taskResult.rows.length > 0) {
+        const taskId = taskResult.rows[0].id;
+        const m = parsed.meta;
+        // Status-Mapping: GitLab 'closed' -> 'done', 'opened' -> keep existing or 'todo'
+        let newStatus = null;
+        if (issue.state === 'closed' && m.status !== 'done') {
+          newStatus = 'done';
+        } else if (issue.state === 'opened' && m.status === 'done') {
+          newStatus = 'in_progress';
+        }
+        await db.query(
+          `UPDATE tasks
+           SET title = COALESCE($1, title),
+               description = $2,
+               status = COALESCE($3, status),
+               priority = COALESCE($4, priority),
+               issue_type = COALESCE($5, issue_type),
+               labels = COALESCE($6, labels),
+               due_date = COALESCE($7, due_date),
+               estimated_hours = COALESCE($8, estimated_hours),
+               custom_fields = COALESCE($9, custom_fields),
+               updated_at = NOW()
+           WHERE id = $10`,
+          [
+            issue.title || null,
+            parsed.description || null,
+            newStatus,
+            m.priority || null,
+            m.issue_type || null,
+            Array.isArray(m.labels) ? m.labels : null,
+            m.due_date || null,
+            m.estimated_hours != null ? m.estimated_hours : null,
+            m.custom_fields && Object.keys(m.custom_fields).length > 0 ? m.custom_fields : null,
+            taskId,
+          ]
+        );
+      }
+    }
+  }
+
   return rows;
 }
 
