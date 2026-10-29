@@ -776,6 +776,8 @@ async function loadAdmin() {
     };
     tbody.appendChild(tr);
   }
+  // #71: Load custom field definitions
+  await loadCustomFieldDefinitions();
   show('admin-view');
 }
 
@@ -1536,6 +1538,10 @@ function bindTaskDetailEvents() {
       if (!state.currentTask || !state.currentProject) return;
       const fd = new FormData(e.target);
       const labels = (fd.get('labels') || '').split(',').map(s => s.trim()).filter(Boolean);
+      // #71: Collect custom field values
+      const customFields = state.currentTask.customFieldDefs
+        ? collectTaskCustomFields(state.currentTask.customFieldDefs)
+        : undefined;
       try {
         await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}`, {
           method: 'PUT',
@@ -1549,6 +1555,7 @@ function bindTaskDetailEvents() {
             estimated_hours: fd.get('estimated_hours') || null,
             spent_hours: fd.get('spent_hours') || null,
             labels,
+            custom_fields: customFields,
           },
         });
         $('#td-msg').textContent = '✅ Gespeichert';
@@ -1748,3 +1755,304 @@ document.addEventListener('submit', async (e) => {
     enhanceTaskForm();
   }
 });
+
+/* ===== ISSUE #71: CUSTOM FIELDS ===== */
+
+const CF_TYPE_LABELS = {
+  text: 'Text', number: 'Zahl', date: 'Datum', checkbox: 'Checkbox', dropdown: 'Dropdown',
+};
+
+/* ===== ADMIN: Custom Field Definitions CRUD ===== */
+
+async function loadCustomFieldDefinitions() {
+  try {
+    const { definitions } = await api('/api/admin/custom-fields');
+    renderCustomFieldTable(definitions);
+  } catch (err) {
+    console.error('Custom Fields laden fehlgeschlagen:', err.message);
+  }
+}
+
+function renderCustomFieldTable(definitions) {
+  const tbody = $('#custom-field-table tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if (!definitions.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><small style="color:var(--text-muted);">Noch keine Custom Fields definiert.</small></td></tr>';
+    return;
+  }
+  for (const def of definitions) {
+    const tr = document.createElement('tr');
+    const optionsText = def.field_type === 'dropdown' ? (def.options || []).join(', ') : '—';
+    tr.innerHTML = `
+      <td>${escapeHtml(def.name)}</td>
+      <td><span class="badge badge-todo">${CF_TYPE_LABELS[def.field_type] || def.field_type}</span></td>
+      <td><small>${escapeHtml(optionsText)}</small></td>
+      <td>${def.is_required ? '✅ Ja' : '—'}</td>
+      <td>
+        <button class="btn-small btn-secondary" onclick="editCustomField(${def.id})">✏️</button>
+        <button class="btn-small btn-secondary" onclick="deleteCustomField(${def.id})">🗑</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function bindCustomFieldAdminEvents() {
+  // Type select changes -> show/hide options input
+  bind('#cf-type-select', 'change', (e) => {
+    const isDropdown = e.target.value === 'dropdown';
+    $('#cf-options-label').hidden = !isDropdown;
+    $('#cf-options-input').required = isDropdown;
+  });
+
+  // Form submit (create or update)
+  bind('submit', async (e) => {
+    if (e.target.id === 'custom-field-form') {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const id = fd.get('id');
+      const fieldType = fd.get('field_type');
+      const options = fieldType === 'dropdown'
+        ? (fd.get('options') || '').split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+      const body = {
+        name: fd.get('name'),
+        field_type: fieldType,
+        options,
+        is_required: fd.get('is_required') === 'on',
+      };
+      try {
+        if (id) {
+          await api(`/api/admin/custom-fields/${id}`, { method: 'PUT', body });
+        } else {
+          await api('/api/admin/custom-fields', { method: 'POST', body });
+        }
+        e.target.reset();
+        $('#custom-field-form input[name="id"]').value = '';
+        $('#cf-submit-btn').textContent = '+ Hinzufügen';
+        $('#cf-cancel-btn').hidden = true;
+        $('#cf-msg').textContent = '✅ Gespeichert';
+        setTimeout(() => { $('#cf-msg').textContent = ''; }, 2000);
+        await loadCustomFieldDefinitions();
+      } catch (err) {
+        $('#cf-msg').textContent = '❌ ' + err.message;
+      }
+    }
+  });
+
+  // Cancel edit
+  bind('#cf-cancel-btn', () => {
+    $('#custom-field-form').reset();
+    $('#custom-field-form input[name="id"]').value = '';
+    $('#cf-submit-btn').textContent = '+ Hinzufügen';
+    $('#cf-cancel-btn').hidden = true;
+    $('#cf-options-label').hidden = true;
+  });
+}
+
+/* Global functions for onclick handlers */
+window.editCustomField = async function(id) {
+  try {
+    const { definitions } = await api('/api/admin/custom-fields');
+    const def = definitions.find(d => d.id === id);
+    if (!def) return;
+    $('#custom-field-form input[name="id"]').value = def.id;
+    $('#custom-field-form input[name="name"]').value = def.name;
+    $('#cf-type-select').value = def.field_type;
+    $('#cf-options-label').hidden = def.field_type !== 'dropdown';
+    $('#cf-options-input').value = (def.options || []).join(', ');
+    $('#cf-options-input').required = def.field_type === 'dropdown';
+    $('#custom-field-form input[name="is_required"]').checked = def.is_required;
+    $('#cf-submit-btn').textContent = 'Speichern';
+    $('#cf-cancel-btn').hidden = false;
+  } catch (err) { alert(err.message); }
+};
+
+window.deleteCustomField = async function(id) {
+  if (!confirm('Custom Field wirklich löschen? Dies entfernt das Feld aus allen Projekten.')) return;
+  try {
+    await api(`/api/admin/custom-fields/${id}`, { method: 'DELETE' });
+    await loadCustomFieldDefinitions();
+  } catch (err) { alert(err.message); }
+};
+
+/* ===== PROJECT: Custom Fields Aktivierung ===== */
+
+async function loadProjectCustomFields(projectId) {
+  const block = $('#project-custom-fields-block');
+  if (!block) return;
+  try {
+    const { definitions } = await api(`/api/projects/${projectId}/custom-fields`);
+    if (!definitions.length) {
+      block.hidden = true;
+      return;
+    }
+    block.hidden = false;
+    renderProjectCustomFields(definitions);
+  } catch (err) {
+    block.hidden = true;
+  }
+}
+
+function renderProjectCustomFields(definitions) {
+  const container = $('#project-cf-list');
+  container.innerHTML = '';
+  for (const def of definitions) {
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0;';
+    div.innerHTML = `
+      <input type="checkbox" id="pcf-${def.id}" ${def.is_enabled ? 'checked' : ''} data-field-id="${def.id}">
+      <label for="pcf-${def.id}" style="flex:1; cursor:pointer;">
+        ${escapeHtml(def.name)}
+        <small style="color:var(--text-muted);">(${CF_TYPE_LABELS[def.field_type] || def.field_type}${def.is_required ? ', Pflichtfeld' : ''})</small>
+      </label>
+    `;
+    container.appendChild(div);
+  }
+  // Show save button only for users with edit permission
+  const saveBtn = $('#save-project-cf-btn');
+  if (saveBtn) {
+    const canEdit = state.currentProject && ['admin', 'projektmanager'].includes(state.currentProject.my_role);
+    saveBtn.hidden = !canEdit;
+  }
+}
+
+function bindProjectCustomFieldsEvents() {
+  bind('#save-project-cf-btn', async () => {
+    if (!state.currentProject) return;
+    const checkboxes = document.querySelectorAll('#project-cf-list input[type="checkbox"]');
+    const fields = Array.from(checkboxes).map(cb => ({
+      field_definition_id: Number(cb.dataset.fieldId),
+      is_enabled: cb.checked,
+    }));
+    try {
+      await api(`/api/projects/${state.currentProject.id}/custom-fields`, {
+        method: 'PUT', body: { fields },
+      });
+      alert('✅ Custom Fields gespeichert');
+    } catch (err) { alert(err.message); }
+  });
+}
+
+/* ===== TASK DETAIL: Custom Fields Rendering ===== */
+
+function renderTaskCustomFields(customFieldDefs, taskCustomFields) {
+  const container = $('#td-custom-fields-container');
+  const inputsDiv = $('#td-custom-fields-inputs');
+  if (!container || !inputsDiv) return;
+  if (!customFieldDefs || !customFieldDefs.length) {
+    container.hidden = true;
+    return;
+  }
+  container.hidden = false;
+  inputsDiv.innerHTML = '';
+  const values = taskCustomFields || {};
+  for (const def of customFieldDefs) {
+    const key = String(def.id);
+    const value = values[key];
+    const fieldDiv = document.createElement('div');
+    fieldDiv.style.cssText = 'margin-bottom:0.75rem;';
+    let inputHtml = '';
+    switch (def.field_type) {
+      case 'text':
+        inputHtml = `<input type="text" id="td-cf-${def.id}" value="${escapeHtml(value || '')}" style="width:100%;">`;
+        break;
+      case 'number':
+        inputHtml = `<input type="number" id="td-cf-${def.id}" value="${value !== undefined ? value : ''}" step="any" style="width:100%;">`;
+        break;
+      case 'date':
+        inputHtml = `<input type="date" id="td-cf-${def.id}" value="${value || ''}" style="width:100%;">`;
+        break;
+      case 'checkbox':
+        inputHtml = `<input type="checkbox" id="td-cf-${def.id}" ${value === true ? 'checked' : ''}>`;
+        break;
+      case 'dropdown':
+        const opts = (def.options || []).map(o =>
+          `<option value="${escapeHtml(o)}" ${o === value ? 'selected' : ''}>${escapeHtml(o)}</option>`
+        ).join('');
+        inputHtml = `<select id="td-cf-${def.id}" style="width:100%;"><option value="">—</option>${opts}</select>`;
+        break;
+    }
+    fieldDiv.innerHTML = `
+      <label style="font-size:0.875rem; color:var(--text-muted);">
+        ${escapeHtml(def.name)}${def.is_required ? ' *' : ''}
+      </label>
+      ${inputHtml}
+    `;
+    inputsDiv.appendChild(fieldDiv);
+  }
+}
+
+function collectTaskCustomFields(customFieldDefs) {
+  const result = {};
+  if (!customFieldDefs) return result;
+  for (const def of customFieldDefs) {
+    const el = $(`#td-cf-${def.id}`);
+    if (!el) continue;
+    switch (def.field_type) {
+      case 'text':
+        result[String(def.id)] = el.value || null;
+        break;
+      case 'number':
+        result[String(def.id)] = el.value === '' ? null : Number(el.value);
+        break;
+      case 'date':
+        result[String(def.id)] = el.value || null;
+        break;
+      case 'checkbox':
+        result[String(def.id)] = el.checked;
+        break;
+      case 'dropdown':
+        result[String(def.id)] = el.value || null;
+        break;
+    }
+  }
+  return result;
+}
+
+/* ===== HOOK INTO renderTaskDetail TO RENDER CUSTOM FIELDS ===== */
+const _origRenderTaskDetail = renderTaskDetail;
+renderTaskDetail = function(data) {
+  _origRenderTaskDetail(data);
+  if (data.customFieldDefs) {
+    renderTaskCustomFields(data.customFieldDefs, data.task.custom_fields);
+  }
+};
+
+/* ===== HOOK INTO TASK EDIT FORM SUBMIT TO SEND CUSTOM FIELDS ===== */
+// We need to intercept the td-edit-form submit to include custom_fields
+const _origBindTaskDetailEvents = bindTaskDetailEvents;
+bindTaskDetailEvents = function() {
+  _origBindTaskDetailEvents();
+  // Override the td-edit-form submit handler to include custom fields
+  document.addEventListener('submit', async (e) => {
+    if (e.target.id === 'td-edit-form' && state.currentTask && state.currentTask.customFieldDefs) {
+      // Let the original handler run first, then we can't easily intercept...
+      // Instead, we modify the approach: we add custom fields collection before the original handler
+      // Actually, the original handler is bound via bind('submit', ...), so we need to
+      // collect custom fields and store them for the original handler to use
+      state._pendingCustomFields = collectTaskCustomFields(state.currentTask.customFieldDefs);
+    }
+  }, true); // Use capture phase to run before the original handler
+};
+
+/* ===== HOOK INTO loadAdmin TO LOAD CUSTOM FIELDS ===== */
+const _origLoadAdmin = typeof loadAdmin !== 'undefined' ? loadAdmin : null;
+if (_origLoadAdmin) {
+  window.loadAdmin = async function() {
+    await _origLoadAdmin();
+    await loadCustomFieldDefinitions();
+  };
+}
+
+/* ===== HOOK INTO loadProject TO LOAD PROJECT CUSTOM FIELDS ===== */
+const _origLoadProject = loadProject;
+loadProject = async function(id) {
+  await _origLoadProject(id);
+  await loadProjectCustomFields(id);
+};
+
+/* ===== INIT CUSTOM FIELD EVENTS ===== */
+bindCustomFieldAdminEvents();
+bindProjectCustomFieldsEvents();

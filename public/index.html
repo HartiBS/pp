@@ -157,6 +157,39 @@
         </div>
       </form>
       <p id="gitlab-settings-msg"></p>
+
+      <h2 style="margin-top:2rem;">Custom Fields (Zusatzfelder)</h2>
+      <p style="color:var(--text-muted); font-size:0.875rem;">Definiere globale Zusatzfelder, die Projektmanager pro Projekt aktivieren können.</p>
+      <form id="custom-field-form">
+        <input type="hidden" name="id">
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
+          <label>Name <input type="text" name="name" placeholder="z. B. Story Points" required maxlength="100"></label>
+          <label>Typ
+            <select name="field_type" id="cf-type-select">
+              <option value="text">Text</option>
+              <option value="number">Zahl</option>
+              <option value="date">Datum</option>
+              <option value="checkbox">Checkbox</option>
+              <option value="dropdown">Dropdown</option>
+            </select>
+          </label>
+          <label id="cf-options-label" hidden>Optionen (kommagetrennt)
+            <input type="text" name="options" id="cf-options-input" placeholder="z. B. Klein, Mittel, Groß">
+          </label>
+          <label style="flex-direction:row; align-items:center;">
+            <input type="checkbox" name="is_required"> Pflichtfeld
+          </label>
+          <button type="submit" id="cf-submit-btn">+ Hinzufügen</button>
+          <button type="button" id="cf-cancel-btn" class="btn-secondary" hidden>Abbrechen</button>
+        </div>
+      </form>
+      <p id="cf-msg"></p>
+      <table id="custom-field-table" style="margin-top:1rem;">
+        <thead>
+          <tr><th>Name</th><th>Typ</th><th>Optionen</th><th>Pflicht</th><th>Aktionen</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </section>
 
     <section id="gitlab-projects-view" hidden>
@@ -344,6 +377,13 @@
         <button id="new-gitlab-issue-btn">+ GitLab-Issue anlegen</button>
         <ul id="gitlab-issue-list"></ul>
       </div>
+
+      <div id="project-custom-fields-block" style="margin-top:2rem;" hidden>
+        <h3>Zusatzfelder (Custom Fields)</h3>
+        <p style="color:var(--text-muted); font-size:0.875rem;">Aktiviere globale Zusatzfelder für dieses Projekt.</p>
+        <div id="project-cf-list"></div>
+        <button type="button" id="save-project-cf-btn" class="btn-secondary" hidden>Auswahl speichern</button>
+      </div>
     </section>
 
     <section id="gitlab-issue-view" hidden>
@@ -449,6 +489,10 @@
             <label>Aufgewendet (h) <input type="number" name="spent_hours" id="td-edit-spent" min="0" step="0.5" style="width:80px;"></label>
           </div>
           <label>Labels (kommagetrennt) <input type="text" name="labels" id="td-edit-labels"></label>
+          <div id="td-custom-fields-container" hidden>
+            <h4>Zusatzfelder</h4>
+            <div id="td-custom-fields-inputs"></div>
+          </div>
           <div style="display:flex; gap:0.75rem; margin-top:0.5rem;">
             <button type="submit">Speichern</button>
             <button type="button" id="td-delete-btn" class="btn-secondary" style="margin-left:auto;">🗑 Task löschen</button>

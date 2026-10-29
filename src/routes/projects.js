@@ -8,6 +8,7 @@ const taskHistory = require('../utils/taskHistory');
 const taskWatchers = require('../utils/taskWatchers');
 const taskComments = require('../utils/taskComments');
 const taskSubtasks = require('../utils/taskSubtasks');
+const customFields = require('../utils/customFields');
 
 const router = express.Router();
 
@@ -131,7 +132,7 @@ router.delete('/:id', loadProjectRole, requireProjectPermission('delete_project'
 });
 
 router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task'), async (req, res) => {
-  const { title, description, issue_type, labels, due_date, epic_id, assignee_id, milestone_id, push_to_gitlab, priority, estimated_hours } = req.body;
+  const { title, description, issue_type, labels, due_date, epic_id, assignee_id, milestone_id, push_to_gitlab, priority, estimated_hours, custom_fields } = req.body;
   if (!title) {
     return res.status(400).json({ error: 'Titel ist erforderlich' });
   }
@@ -167,9 +168,19 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
       return res.status(400).json({ error: 'estimated_hours muss eine positive Zahl sein' });
     }
 
+    // #71: Custom Fields validieren
+    let cleanedCustomFields = {};
+    if (custom_fields !== undefined && custom_fields !== null) {
+      const cfResult = await customFields.validateTaskCustomFields(req.params.id, custom_fields);
+      if (!cfResult.ok) {
+        return res.status(400).json({ error: cfResult.error });
+      }
+      cleanedCustomFields = cfResult.cleaned;
+    }
+
     const { rows } = await db.query(
-      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, gitlab_iid, priority, estimated_hours, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, gitlab_iid, priority, estimated_hours, created_by, custom_fields)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
       [
         req.params.id,
         title,
@@ -184,6 +195,7 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
         taskPriority,
         estHours,
         req.session.userId,
+        cleanedCustomFields,
       ]
     );
     const newTask = rows[0];
@@ -211,7 +223,7 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
 });
 
 router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
-  const { title, description, status, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, priority, estimated_hours, spent_hours } = req.body;
+  const { title, description, status, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, priority, estimated_hours, spent_hours, custom_fields } = req.body;
   try {
     const prev = await db.query(
       `SELECT t.*, p.gitlab_project_id
@@ -254,6 +266,16 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
       }
     }
 
+    // #71: Custom Fields validieren (wenn übergeben)
+    let cleanedCustomFields = null;
+    if (custom_fields !== undefined && custom_fields !== null) {
+      const cfResult = await customFields.validateTaskCustomFields(req.params.id, custom_fields);
+      if (!cfResult.ok) {
+        return res.status(400).json({ error: cfResult.error });
+      }
+      cleanedCustomFields = cfResult.cleaned;
+    }
+
     const { rows } = await db.query(
       `UPDATE tasks
        SET title = COALESCE($1, title),
@@ -268,12 +290,14 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
            priority = COALESCE($10, priority),
            estimated_hours = COALESCE($11, estimated_hours),
            spent_hours = COALESCE($12, spent_hours),
+           custom_fields = COALESCE($13, custom_fields),
            updated_at = NOW()
-       WHERE id = $13 AND project_id = $14
+       WHERE id = $14 AND project_id = $15
        RETURNING *`,
       [title, description, status, assignee_id, issue_type,
        labels !== undefined ? (Array.isArray(labels) ? labels : []) : null,
        due_date, epic_id, milestone_id, newPriority, estHours, spentH,
+       cleanedCustomFields,
        req.params.taskId, req.params.id]
     );
     if (rows.length === 0) {
@@ -617,6 +641,7 @@ router.get('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('view
       taskSubtasks.getSubtaskProgress(req.params.taskId),
     ]);
     const watching = await taskWatchers.isWatching(req.params.taskId, req.session.userId);
+    const customFieldDefs = await customFields.getProjectFieldDefinitions(req.params.id);
     res.json({
       task: { ...task, subtask_count: progress.total, subtask_done: progress.done },
       comments,
@@ -624,6 +649,7 @@ router.get('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('view
       subtasks,
       watchers,
       watching,
+      customFieldDefs,
     });
   } catch (err) {
     console.error(err);
@@ -632,6 +658,54 @@ router.get('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('view
 });
 
 
+
+// ===== Issue #71: Custom Fields pro Projekt =====
+
+// GET: Alle Custom-Field-Definitionen mit Aktivierungsstatus für dieses Projekt
+router.get('/:id/custom-fields', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const definitions = await customFields.getProjectFieldDefinitionsWithStatus(req.params.id);
+    res.json({ definitions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// PUT: Custom Fields für dieses Projekt aktivieren/deaktivieren (nur PM/Admin)
+router.put('/:id/custom-fields', loadProjectRole, requireProjectPermission('edit_project'), async (req, res) => {
+  const { fields } = req.body;
+  if (!Array.isArray(fields)) {
+    return res.status(400).json({ error: 'fields muss ein Array sein' });
+  }
+  for (const f of fields) {
+    if (!Number.isInteger(Number(f.field_definition_id))) {
+      return res.status(400).json({ error: 'Ungültige field_definition_id' });
+    }
+    if (typeof f.is_enabled !== 'boolean') {
+      return res.status(400).json({ error: 'is_enabled muss ein Boolean sein' });
+    }
+  }
+  try {
+    await customFields.setProjectFields(req.params.id, fields);
+    const definitions = await customFields.getProjectFieldDefinitionsWithStatus(req.params.id);
+    res.json({ definitions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// GET: Nur die aktiven Custom-Field-Definitionen für dieses Projekt (für Task-Formular)
+router.get('/:id/custom-fields/active', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const definitions = await customFields.getProjectFieldDefinitions(req.params.id);
+    res.json({ definitions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
 
 router.get('/:id/dashboard', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
   try {

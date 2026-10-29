@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const roles = require('../utils/roles');
+const customFields = require('../utils/customFields');
 
 const router = express.Router();
 
@@ -204,6 +205,73 @@ router.put('/permissions-matrix/:role', async (req, res) => {
     res.json({ role: req.params.role, permissions: saved });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// ===== Issue #71: Custom Field Definitions (Admin) =====
+
+router.get('/custom-fields', async (req, res) => {
+  try {
+    const definitions = await customFields.getAllDefinitions();
+    res.json({ definitions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.post('/custom-fields', async (req, res) => {
+  const { name, field_type, options, is_required } = req.body;
+  const validation = customFields.validateFieldDefinition({
+    name,
+    field_type: field_type || 'text',
+    options: Array.isArray(options) ? options : [],
+    is_required: is_required || false,
+  });
+  if (!validation.ok) {
+    return res.status(400).json({ error: validation.error });
+  }
+  try {
+    const def = await customFields.createDefinition({
+      name, field_type: field_type || 'text', options, is_required: is_required || false,
+    });
+    res.status(201).json({ definition: def });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.put('/custom-fields/:id', async (req, res) => {
+  const { name, field_type, options, is_required } = req.body;
+  if (field_type !== undefined && !customFields.VALID_FIELD_TYPES.includes(field_type)) {
+    return res.status(400).json({ error: `Ungültiger Feldtyp. Erlaubt: ${customFields.VALID_FIELD_TYPES.join(', ')}` });
+  }
+  if (field_type === 'dropdown' && options !== undefined && (!Array.isArray(options) || options.length === 0)) {
+    return res.status(400).json({ error: 'Dropdown-Felder benötigen mindestens eine Option' });
+  }
+  try {
+    const updated = await customFields.updateDefinition(req.params.id, { name, field_type, options, is_required });
+    if (!updated) {
+      return res.status(404).json({ error: 'Custom Field nicht gefunden' });
+    }
+    res.json({ definition: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.delete('/custom-fields/:id', async (req, res) => {
+  try {
+    const deleted = await customFields.deleteDefinition(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Custom Field nicht gefunden' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
   }
 });
 

@@ -918,3 +918,74 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 #td-edit-form textarea {
   font-size: 0.9rem;
 }
+
+/* ===== Issue #71: Custom Fields ===== */
+
+#custom-field-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+#custom-field-table th,
+#custom-field-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
+}
+
+#custom-field-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+#project-custom-fields-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+#project-cf-list {
+  margin-bottom: 0.75rem;
+}
+
+#td-custom-fields-container {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+#td-custom-fields-container h4 {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+#td-custom-fields-inputs input[type="text"],
+#td-custom-fields-inputs input[type="number"],
+#td-custom-fields-inputs input[type="date"],
+#td-custom-fields-inputs select {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+#td-custom-fields-inputs input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+#cf-options-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
