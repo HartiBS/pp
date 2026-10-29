@@ -597,6 +597,11 @@ async function loadProject(id) {
   $('#sync-gitlab-btn').disabled = !project.gitlab_project_id;
   $('#new-gitlab-issue-btn').hidden = readonly || !project.gitlab_project_id;
   $('#push-gitlab-label').hidden = !project.gitlab_project_id;
+  // #83: Auto-Sync-Checkbox anzeigen, wenn Tracker konfiguriert
+  const hasTracker = !!(project.issue_tracker_type && project.issue_tracker_type !== 'none' &&
+    (project.gitlab_project_id || project.github_repo));
+  const autoSyncLabel = $('#auto-sync-label');
+  if (autoSyncLabel) autoSyncLabel.hidden = !hasTracker;
 
   // #56: Beim Öffnen automatisch mit GitLab synchronisieren (falls verknüpft)
   if (project.gitlab_project_id) {
@@ -1049,6 +1054,7 @@ document.addEventListener('submit', async (e) => {
       assignee_id: fd.get('assignee_id') || null,
       milestone_id: fd.get('milestone_id') || null,
       push_to_gitlab: fd.get('push_to_gitlab') === 'on',
+      auto_sync: fd.get('auto_sync') === 'on',
       priority: fd.get('priority') || 'normal',
       estimated_hours: fd.get('estimated_hours') || null,
     };
@@ -1314,6 +1320,15 @@ function renderTaskDetail(data) {
     glLink.hidden = true;
   }
 
+  // #83: Auto-Sync-Checkbox in Edit-Form anzeigen, wenn Tracker konfiguriert
+  const tdAutoSyncLabel = $('#td-auto-sync-label');
+  if (tdAutoSyncLabel) {
+    const hasTracker = !!(state.currentProject && state.currentProject.issue_tracker_type &&
+      state.currentProject.issue_tracker_type !== 'none' &&
+      (state.currentProject.gitlab_project_id || state.currentProject.github_repo));
+    tdAutoSyncLabel.hidden = !hasTracker;
+  }
+
   // Watch button
   const watchBtn = $('#td-watch-btn');
   watchBtn.textContent = watching ? '★ Watching' : '☆ Watch';
@@ -1556,6 +1571,7 @@ function bindTaskDetailEvents() {
             spent_hours: fd.get('spent_hours') || null,
             labels,
             custom_fields: customFields,
+            auto_sync: fd.get('auto_sync') === 'on',
           },
         });
         $('#td-msg').textContent = '✅ Gespeichert';
@@ -2383,3 +2399,248 @@ if (_origLoadAdminGh) {
 /* ===== INIT ===== */
 bindGitHubAdminEvents();
 bindTrackerEvents();
+
+/* ============================================================
+ * Issues #80-83: Admin-Projektverwaltung, Pro-Projekt Tracker-Settings,
+ * Auto-Sync beim Projekt-Oeffnen, Auto-Sync beim Task-Speichern
+ * ============================================================ */
+
+/* ===== #81: Admin-Projektverwaltung ===== */
+
+async function loadAdminProjects() {
+  const tbody = $('#admin-project-table tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Laden...</td></tr>';
+  try {
+    const { projects } = await api('/api/admin/projects');
+    tbody.innerHTML = '';
+    if (!projects || projects.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Keine Projekte vorhanden.</td></tr>';
+      return;
+    }
+    for (const p of projects) {
+      const tr = document.createElement('tr');
+      const statusLabels = { active: 'Aktiv', paused: 'Pausiert', done: 'Abgeschlossen', archived: 'Archiviert' };
+      const statusLabel = statusLabels[p.status] || p.status || 'active';
+      const trackerLabel = p.issue_tracker_type === 'gitlab' ? 'GitLab' : p.issue_tracker_type === 'github' ? 'GitHub' : '\u2013';
+      tr.innerHTML = `
+        <td>${escapeHtml(p.name)}</td>
+        <td>${escapeHtml(p.owner_name || '')}</td>
+        <td><span class="badge">${statusLabel}</span></td>
+        <td>${trackerLabel}</td>
+        <td style="text-align:center;">${p.task_count || 0}</td>
+        <td style="text-align:center;">${p.member_count || 0}</td>
+        <td>
+          <button class="btn-small edit-admin-project-btn">Bearbeiten</button>
+          <button class="btn-small btn-secondary delete-admin-project-btn" style="color:var(--danger);">L\u00f6schen</button>
+        </td>`;
+      tr.querySelector('.edit-admin-project-btn').onclick = () => editAdminProject(p);
+      tr.querySelector('.delete-admin-project-btn').onclick = () => deleteAdminProject(p);
+      tbody.appendChild(tr);
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--danger);">Fehler: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function editAdminProject(project) {
+  const form = $('#admin-project-form');
+  if (!form) return;
+  form.hidden = false;
+  form.elements['id'].value = project.id;
+  form.elements['name'].value = project.name || '';
+  form.elements['description'].value = project.description || '';
+  form.elements['status'].value = project.status || 'active';
+
+  // Owner-Dropdown laden
+  const ownerSelect = $('#admin-project-owner-select');
+  ownerSelect.innerHTML = '<option value="">Laden...</option>';
+  try {
+    const { users } = await api('/api/admin/projects-users');
+    ownerSelect.innerHTML = '';
+    for (const u of users) {
+      const opt = document.createElement('option');
+      opt.value = u.id;
+      opt.textContent = `${u.name} (@${u.username})`;
+      if (String(u.id) === String(project.owner_id)) opt.selected = true;
+      ownerSelect.appendChild(opt);
+    }
+  } catch (err) {
+    ownerSelect.innerHTML = `<option value="${project.owner_id}">${escapeHtml(project.owner_name || '')}</option>`;
+  }
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+async function deleteAdminProject(project) {
+  if (!confirm(`Projekt "${project.name}" wirklich l\u00f6schen?\nAlle Tasks, Mitglieder und Einstellungen werden entfernt.`)) return;
+  try {
+    await api(`/api/admin/projects/${project.id}`, { method: 'DELETE' });
+    await loadAdminProjects();
+  } catch (err) { alert(err.message); }
+}
+
+function bindAdminProjectEvents() {
+  // Form submit (edit)
+  bind('submit', async (e) => {
+    if (e.target.id === 'admin-project-form') {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const id = fd.get('id');
+      const body = {
+        name: fd.get('name'),
+        description: fd.get('description') || null,
+        status: fd.get('status'),
+        owner_id: Number(fd.get('owner_id')),
+      };
+      try {
+        await api(`/api/admin/projects/${id}`, { method: 'PUT', body });
+        $('#admin-project-form').hidden = true;
+        await loadAdminProjects();
+      } catch (err) { alert(err.message); }
+    }
+  });
+
+  // Cancel button
+  bind('#admin-project-cancel-btn', () => {
+    $('#admin-project-form').hidden = true;
+  });
+}
+
+/* ===== #82: Pro-Projekt Tracker-Settings ===== */
+
+async function loadProjectTrackerSettings(projectId) {
+  const block = $('#project-tracker-settings-block');
+  const toggleBtn = $('#toggle-project-tracker-settings-btn');
+  if (!block || !toggleBtn) return;
+
+  // Nur anzeigen, wenn ein Tracker konfiguriert ist
+  const trackerType = state.currentTracker ? state.currentTracker.type : null;
+  if (!trackerType || trackerType === 'none') {
+    toggleBtn.hidden = true;
+    block.hidden = true;
+    return;
+  }
+  toggleBtn.hidden = false;
+
+  // Settings laden
+  try {
+    const settings = await api(`/api/projects/${projectId}/tracker/settings`);
+    state.currentTrackerSettings = settings;
+    if (settings.has_project_settings && settings.base_url) {
+      const form = $('#project-tracker-settings-form');
+      form.elements['base_url'].value = settings.base_url || '';
+      form.elements['access_token'].value = ''; // Token nicht anzeigen, nur neu eingeben
+      form.elements['service_account_username'].value = settings.service_account_username || '';
+    }
+  } catch (err) {
+    // Nicht kritisch - einfach keine Settings vorausf\u00fcllen
+    console.error('Tracker-Settings konnten nicht geladen werden:', err.message);
+  }
+}
+
+function bindProjectTrackerSettingsEvents() {
+  // Toggle visibility
+  bind('#toggle-project-tracker-settings-btn', () => {
+    const block = $('#project-tracker-settings-block');
+    if (block) block.hidden = !block.hidden;
+  });
+
+  // Form submit (save)
+  bind('submit', async (e) => {
+    if (e.target.id === 'project-tracker-settings-form') {
+      e.preventDefault();
+      if (!state.currentProject) return;
+      const fd = new FormData(e.target);
+      const baseUrl = fd.get('base_url');
+      const accessToken = fd.get('access_token');
+      const msgEl = $('#project-tracker-settings-msg');
+      if (!baseUrl || !accessToken) {
+        if (msgEl) { msgEl.textContent = 'API-URL und Access Token sind erforderlich.'; msgEl.style.color = 'var(--danger)'; }
+        return;
+      }
+      try {
+        await api(`/api/projects/${state.currentProject.id}/tracker/settings`, {
+          method: 'PUT',
+          body: {
+            base_url: baseUrl,
+            access_token: accessToken,
+            service_account_username: fd.get('service_account_username') || null,
+          },
+        });
+        if (msgEl) { msgEl.textContent = '\u2705 Gespeichert'; msgEl.style.color = 'var(--success)'; }
+        e.target.elements['access_token'].value = '';
+        await loadProjectTrackerSettings(state.currentProject.id);
+      } catch (err) {
+        if (msgEl) { msgEl.textContent = err.message; msgEl.style.color = 'var(--danger)'; }
+      }
+    }
+  });
+
+  // Delete (reset to global)
+  bind('#delete-project-tracker-settings-btn', async () => {
+    if (!state.currentProject) return;
+    if (!confirm('Projekt-spezifische Verbindung entfernen? Es wird wieder die globale Verbindung verwendet.')) return;
+    const msgEl = $('#project-tracker-settings-msg');
+    try {
+      await api(`/api/projects/${state.currentProject.id}/tracker/settings`, { method: 'DELETE' });
+      const form = $('#project-tracker-settings-form');
+      if (form) form.reset();
+      if (msgEl) { msgEl.textContent = '\u2705 Auf globale Einstellungen zur\u00fcckgesetzt'; msgEl.style.color = 'var(--success)'; }
+      await loadProjectTrackerSettings(state.currentProject.id);
+    } catch (err) {
+      if (msgEl) { msgEl.textContent = err.message; msgEl.style.color = 'var(--danger)'; }
+    }
+  });
+}
+
+/* ===== #80: Sync-Indikator beim Projekt-Oeffnen ===== */
+
+function showSyncIndicator() {
+  // Zeigt einen kleinen Indikator in der Projekt-Detail-Ansicht
+  let indicator = $('#sync-indicator');
+  if (!indicator) {
+    indicator = document.createElement('span');
+    indicator.id = 'sync-indicator';
+    indicator.className = 'badge';
+    indicator.style.cssText = 'margin-left:0.5rem; font-size:0.75rem; opacity:0.7;';
+    const detailStatus = $('#detail-status');
+    if (detailStatus && detailStatus.parentNode) {
+      detailStatus.parentNode.appendChild(indicator);
+    }
+  }
+  indicator.textContent = '\u21bb Sync...';
+  indicator.hidden = false;
+}
+
+function hideSyncIndicator() {
+  const indicator = $('#sync-indicator');
+  if (indicator) indicator.hidden = true;
+}
+
+/* ===== HOOKS ===== */
+
+// Hook: loadAdmin -> auch Projekte laden (#81)
+const _origLoadAdminFinal = typeof loadAdmin !== 'undefined' ? loadAdmin : null;
+if (_origLoadAdminFinal) {
+  const _prevLoadAdmin = window.loadAdmin || _origLoadAdminFinal;
+  window.loadAdmin = async function() {
+    await _prevLoadAdmin();
+    await loadAdminProjects();
+  };
+}
+
+// Hook: loadProject -> auch Tracker-Settings laden (#82)
+const _origLoadProjectFinal = loadProject;
+loadProject = async function(id) {
+  await _origLoadProjectFinal(id);
+  // #80: Sync-Indikator anzeigen waehrend Backend-Sync laeuft
+  const tracker = state.currentTracker;
+  if (tracker && tracker.configured) showSyncIndicator();
+  await loadProjectTrackerSettings(id);
+  // Indikator nach kurzer Zeit ausblenden (Backend-Sync ist best-effort)
+  setTimeout(hideSyncIndicator, 3000);
+};
+
+/* ===== INIT ===== */
+bindAdminProjectEvents();
+bindProjectTrackerSettingsEvents();

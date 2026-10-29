@@ -28,8 +28,8 @@ async function saveSettings(baseUrl, accessToken, userId, serviceAccountUsername
   return rows[0];
 }
 
-async function githubRequest(path, { method = 'GET', body } = {}) {
-  const settings = await getSettings();
+async function githubRequest(path, { method = 'GET', body, projectSettings } = {}) {
+  const settings = projectSettings || await getSettings();
   if (!settings) {
     const err = new Error('GitHub ist nicht konfiguriert');
     err.status = 400;
@@ -79,9 +79,10 @@ function mapGitHubIssue(issue) {
   };
 }
 
-async function syncProjectIssues(projectId, repo) {
+async function syncProjectIssues(projectId, repo, options = {}) {
   const issues = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/issues?per_page=100&state=all&sort=updated&direction=desc`
+    `/repos/${encodeURIComponent(repo)}/issues?per_page=100&state=all&sort=updated&direction=desc`,
+    { projectSettings: options.projectSettings }
   );
 
   // Nur Issues (keine PRs — GitHub listet PRs auch als Issues)
@@ -115,39 +116,40 @@ async function syncProjectIssues(projectId, repo) {
   return rows;
 }
 
-async function createGitHubIssue(repo, { title, description, labels }) {
+async function createGitHubIssue(repo, { title, description, labels }, options = {}) {
   const body = { title, body: description || '' };
   if (Array.isArray(labels) && labels.length > 0) body.labels = labels;
   const issue = await githubRequest(
     `/repos/${encodeURIComponent(repo)}/issues`,
-    { method: 'POST', body }
+    { method: 'POST', body, projectSettings: options.projectSettings }
   );
   return mapGitHubIssue(issue);
 }
 
-async function updateGitHubIssue(repo, number, { title, description, state_event }) {
+async function updateGitHubIssue(repo, number, { title, description, state_event }, options = {}) {
   const body = {};
   if (title !== undefined) body.title = title;
   if (description !== undefined) body.body = description;
   if (state_event) body.state = state_event === 'close' ? 'closed' : 'open';
   const issue = await githubRequest(
     `/repos/${encodeURIComponent(repo)}/issues/${number}`,
-    { method: 'PATCH', body }
+    { method: 'PATCH', body, projectSettings: options.projectSettings }
   );
   return mapGitHubIssue(issue);
 }
 
-async function addGitHubComment(repo, number, note) {
+async function addGitHubComment(repo, number, note, options = {}) {
   await githubRequest(
     `/repos/${encodeURIComponent(repo)}/issues/${number}/comments`,
-    { method: 'POST', body: { body: note } }
+    { method: 'POST', body: { body: note }, projectSettings: options.projectSettings }
   );
   return true;
 }
 
-async function getGitHubComments(repo, number) {
+async function getGitHubComments(repo, number, options = {}) {
   const comments = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/issues/${number}/comments?per_page=100`
+    `/repos/${encodeURIComponent(repo)}/issues/${number}/comments?per_page=100`,
+    { projectSettings: options.projectSettings }
   );
   return (comments || []).map(c => ({
     id: c.id,
@@ -158,11 +160,12 @@ async function getGitHubComments(repo, number) {
   }));
 }
 
-async function listGitHubRepos(search) {
+async function listGitHubRepos(search, options = {}) {
   // Authenticated user's repos
   if (search) {
     const data = await githubRequest(
-      `/search/repositories?q=${encodeURIComponent(search)}+in:name&per_page=50&sort=updated`
+      `/search/repositories?q=${encodeURIComponent(search)}+in:name&per_page=50&sort=updated`,
+      { projectSettings: options.projectSettings }
     );
     return (data.items || []).map(r => ({
       id: r.id,
@@ -174,7 +177,7 @@ async function listGitHubRepos(search) {
       private: r.private,
     }));
   }
-  const repos = await githubRequest('/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member');
+  const repos = await githubRequest('/user/repos?per_page=100&sort=updated&affiliation=owner,collaborator,organization_member', { projectSettings: options.projectSettings });
   return (repos || []).map(r => ({
     id: r.id,
     name: r.name,
@@ -186,8 +189,8 @@ async function listGitHubRepos(search) {
   }));
 }
 
-async function listGitHubOrgs() {
-  const orgs = await githubRequest('/user/orgs?per_page=100');
+async function listGitHubOrgs(options = {}) {
+  const orgs = await githubRequest('/user/orgs?per_page=100', { projectSettings: options.projectSettings });
   return (orgs || []).map(o => ({
     id: o.id,
     login: o.login,
@@ -196,9 +199,10 @@ async function listGitHubOrgs() {
   }));
 }
 
-async function listGitHubMilestones(repo) {
+async function listGitHubMilestones(repo, options = {}) {
   const milestones = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/milestones?per_page=100&state=all`
+    `/repos/${encodeURIComponent(repo)}/milestones?per_page=100&state=all`,
+    { projectSettings: options.projectSettings }
   );
   return (milestones || []).map(m => ({
     gitlab_id: m.id,
@@ -210,22 +214,24 @@ async function listGitHubMilestones(repo) {
   }));
 }
 
-async function listGitHubLabels(repo) {
+async function listGitHubLabels(repo, options = {}) {
   const labels = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/labels?per_page=100`
+    `/repos/${encodeURIComponent(repo)}/labels?per_page=100`,
+    { projectSettings: options.projectSettings }
   );
   return labels || [];
 }
 
-async function listGitHubUsers(repo) {
+async function listGitHubUsers(repo, options = {}) {
   const users = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/collaborators?per_page=100`
+    `/repos/${encodeURIComponent(repo)}/collaborators?per_page=100`,
+    { projectSettings: options.projectSettings }
   );
   return (users || []).map(u => ({ id: u.id, username: u.login, name: u.login }));
 }
 
-async function testConnection() {
-  const user = await githubRequest('/user');
+async function testConnection(options = {}) {
+  const user = await githubRequest('/user', { projectSettings: options.projectSettings });
   return { id: user.id, username: user.login, name: user.name || user.login };
 }
 

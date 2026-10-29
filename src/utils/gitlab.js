@@ -28,8 +28,8 @@ async function saveSettings(baseUrl, accessToken, userId, serviceAccountUsername
   return rows[0];
 }
 
-async function gitlabRequest(path, { method = 'GET', body } = {}) {
-  const settings = await getSettings();
+async function gitlabRequest(path, { method = 'GET', body, projectSettings } = {}) {
+  const settings = projectSettings || await getSettings();
   if (!settings) {
     const err = new Error('GitLab ist nicht konfiguriert');
     err.status = 400;
@@ -87,9 +87,10 @@ function mapGitLabIssue(issue) {
   };
 }
 
-async function syncProjectIssues(projectId, gitlabProjectId) {
+async function syncProjectIssues(projectId, gitlabProjectId, options = {}) {
   const issues = await gitlabRequest(
-    `/projects/${encodeURIComponent(gitlabProjectId)}/issues?per_page=100&order_by=updated_at&sort=desc`
+    `/projects/${encodeURIComponent(gitlabProjectId)}/issues?per_page=100&order_by=updated_at&sort=desc`,
+    { projectSettings: options.projectSettings }
   );
 
   for (const issue of issues) {
@@ -170,43 +171,44 @@ async function syncProjectIssues(projectId, gitlabProjectId) {
   return rows;
 }
 
-async function createGitLabIssue(gitlabProjectId, { title, description }) {
+async function createGitLabIssue(gitlabProjectId, { title, description }, options = {}) {
   const issue = await gitlabRequest(
     `/projects/${encodeURIComponent(gitlabProjectId)}/issues`,
-    { method: 'POST', body: { title, description } }
+    { method: 'POST', body: { title, description }, projectSettings: options.projectSettings }
   );
   return mapGitLabIssue(issue);
 }
 
-async function updateGitLabIssue(gitlabProjectId, iid, { title, description, state_event }) {
+async function updateGitLabIssue(gitlabProjectId, iid, { title, description, state_event }, options = {}) {
   const body = {};
   if (title !== undefined) body.title = title;
   if (description !== undefined) body.description = description;
   if (state_event) body.state_event = state_event;
   const issue = await gitlabRequest(
     `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}`,
-    { method: 'PUT', body }
+    { method: 'PUT', body, projectSettings: options.projectSettings }
   );
   return mapGitLabIssue(issue);
 }
 
-async function addGitLabComment(gitlabProjectId, iid, note) {
+async function addGitLabComment(gitlabProjectId, iid, note, options = {}) {
   await gitlabRequest(
     `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}/notes`,
-    { method: 'POST', body: { body: note } }
+    { method: 'POST', body: { body: note }, projectSettings: options.projectSettings }
   );
   return true;
 }
 
-async function getGitLabComments(gitlabProjectId, iid) {
+async function getGitLabComments(gitlabProjectId, iid, options = {}) {
   return gitlabRequest(
-    `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}/notes?per_page=100&order_by=created_at&sort=asc`
+    `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}/notes?per_page=100&order_by=created_at&sort=asc`,
+    { projectSettings: options.projectSettings }
   );
 }
 
-async function listGitLabProjects(search) {
+async function listGitLabProjects(search, options = {}) {
   const q = search ? `?search=${encodeURIComponent(search)}&membership=true&per_page=50&order_by=last_activity_at&sort=desc` : '?membership=true&per_page=50&order_by=last_activity_at&sort=desc';
-  const projects = await gitlabRequest(`/projects${q}`);
+  const projects = await gitlabRequest(`/projects${q}`, { projectSettings: options.projectSettings });
   return projects.map(p => ({
     id: p.id,
     name: p.name,
@@ -217,9 +219,9 @@ async function listGitLabProjects(search) {
   }));
 }
 
-async function listGitLabGroups(search) {
+async function listGitLabGroups(search, options = {}) {
   const q = search ? `?search=${encodeURIComponent(search)}&per_page=50&order_by=last_activity_at&sort=desc` : '?per_page=50&order_by=last_activity_at&sort=desc';
-  const groups = await gitlabRequest(`/groups${q}`);
+  const groups = await gitlabRequest(`/groups${q}`, { projectSettings: options.projectSettings });
   return groups.map(g => ({
     id: g.id,
     name: g.name,
@@ -228,9 +230,10 @@ async function listGitLabGroups(search) {
   }));
 }
 
-async function listGitLabMilestones(gitlabProjectId) {
+async function listGitLabMilestones(gitlabProjectId, options = {}) {
   const milestones = await gitlabRequest(
-    `/projects/${encodeURIComponent(gitlabProjectId)}/milestones?per_page=100&order_by=due_date&sort=asc`
+    `/projects/${encodeURIComponent(gitlabProjectId)}/milestones?per_page=100&order_by=due_date&sort=asc`,
+    { projectSettings: options.projectSettings }
   );
   return milestones.map(m => ({
     gitlab_id: m.id,
@@ -242,27 +245,28 @@ async function listGitLabMilestones(gitlabProjectId) {
   }));
 }
 
-async function listGitLabLabels(gitlabProjectId) {
-  return gitlabRequest(`/projects/${encodeURIComponent(gitlabProjectId)}/labels?per_page=100`);
+async function listGitLabLabels(gitlabProjectId, options = {}) {
+  return gitlabRequest(`/projects/${encodeURIComponent(gitlabProjectId)}/labels?per_page=100`, { projectSettings: options.projectSettings });
 }
 
-async function assignGitLabIssue(gitlabProjectId, iid, assigneeId) {
+async function assignGitLabIssue(gitlabProjectId, iid, assigneeId, options = {}) {
   const issue = await gitlabRequest(
     `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}`,
-    { method: 'PUT', body: { assignee_id: assigneeId } }
+    { method: 'PUT', body: { assignee_id: assigneeId }, projectSettings: options.projectSettings }
   );
   return mapGitLabIssue(issue);
 }
 
-async function listGitLabUsers(gitlabProjectId) {
+async function listGitLabUsers(gitlabProjectId, options = {}) {
   const users = await gitlabRequest(
-    `/projects/${encodeURIComponent(gitlabProjectId)}/users?per_page=100`
+    `/projects/${encodeURIComponent(gitlabProjectId)}/users?per_page=100`,
+    { projectSettings: options.projectSettings }
   );
   return users.map(u => ({ id: u.id, username: u.username, name: u.name }));
 }
 
-async function syncProjectMilestones(projectId, gitlabProjectId) {
-  const milestones = await listGitLabMilestones(gitlabProjectId);
+async function syncProjectMilestones(projectId, gitlabProjectId, options = {}) {
+  const milestones = await listGitLabMilestones(gitlabProjectId, options);
   for (const m of milestones) {
     await db.query(
       `INSERT INTO gitlab_milestones (project_id, gitlab_id, title, description, state, due_date, web_url, synced_at)
@@ -292,20 +296,20 @@ async function syncProjectMilestones(projectId, gitlabProjectId) {
  * @param {number} targetIid - Ziel-Issue IID
  * @param {string} linkType - 'relates_to' | 'blocks' | 'is_blocked_by'
  */
-async function createIssueLink(gitlabProjectId, sourceIid, targetIid, linkType = 'relates_to') {
+async function createIssueLink(gitlabProjectId, sourceIid, targetIid, linkType = 'relates_to', options = {}) {
   return gitlabRequest(
     `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${sourceIid}/links`,
-    { method: 'POST', body: { target_project_id: gitlabProjectId, target_issue_iid: targetIid, link_type: linkType } }
+    { method: 'POST', body: { target_project_id: gitlabProjectId, target_issue_iid: targetIid, link_type: linkType }, projectSettings: options.projectSettings }
   );
 }
 
 /**
  * #74: Löscht einen GitLab-Issue-Link.
  */
-async function deleteIssueLink(gitlabProjectId, sourceIid, linkId) {
+async function deleteIssueLink(gitlabProjectId, sourceIid, linkId, options = {}) {
   await gitlabRequest(
     `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${sourceIid}/links/${linkId}`,
-    { method: 'DELETE' }
+    { method: 'DELETE', projectSettings: options.projectSettings }
   );
   return true;
 }
@@ -313,9 +317,10 @@ async function deleteIssueLink(gitlabProjectId, sourceIid, linkId) {
 /**
  * #74: Holt alle Links eines GitLab-Issues.
  */
-async function getIssueLinks(gitlabProjectId, iid) {
+async function getIssueLinks(gitlabProjectId, iid, options = {}) {
   return gitlabRequest(
-    `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}/links?per_page=100`
+    `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}/links?per_page=100`,
+    { projectSettings: options.projectSettings }
   );
 }
 

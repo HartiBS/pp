@@ -1037,3 +1037,116 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 #td-children-progress-bar {
   transition: width 0.3s ease;
 }
+
+/* ===== Issues #80-83: Admin-Projektverwaltung, Tracker-Settings, Auto-Sync ===== */
+
+/* #81: Admin-Projekt-Tabelle */
+#admin-project-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+}
+
+#admin-project-table th,
+#admin-project-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+#admin-project-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+#admin-project-table tbody tr:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.03));
+}
+
+#admin-project-table .btn-small {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  margin-right: 0.25rem;
+}
+
+/* #81: Admin-Projekt-Formular */
+#admin-project-form {
+  margin-top: 1rem;
+}
+
+#admin-project-form h3 {
+  margin-bottom: 0.75rem;
+}
+
+/* #82: Projekt-Tracker-Settings-Block */
+#project-tracker-settings-block {
+  padding: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+#project-tracker-settings-block h4 {
+  margin-bottom: 0.5rem;
+}
+
+#project-tracker-settings-block form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 400px;
+}
+
+#project-tracker-settings-block form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+#project-tracker-settings-block form input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+#project-tracker-settings-msg {
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+  min-height: 1.2em;
+}
+
+/* #80: Sync-Indikator */
+#sync-indicator {
+  animation: pulse-sync 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-sync {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* #83: Auto-Sync-Label in Task-Formularen */
+#auto-sync-label,
+#td-auto-sync-label {
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#auto-sync-label input,
+#td-auto-sync-label input {
+  margin: 0;
+}
+
+/* Toggle-Button fuer Tracker-Settings */
+#toggle-project-tracker-settings-btn {
+  margin-top: 0.5rem;
+}

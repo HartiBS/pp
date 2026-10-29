@@ -10,6 +10,8 @@ const taskMarkdown = require('./taskMarkdown');
 
 /**
  * Holt den Tracker-Typ und die Verbindungsdaten eines Projekts.
+ * #82: Lädt auch project-spezifische Settings (project_gitlab_settings /
+ * project_github_settings), die globale Settings überschreiben.
  */
 async function getProjectTracker(projectId) {
   const { rows } = await db.query(
@@ -17,7 +19,98 @@ async function getProjectTracker(projectId) {
     [projectId]
   );
   if (rows.length === 0) return null;
+  const project = rows[0];
+
+  // #82: Project-spezifische GitLab-Settings laden
+  if (project.issue_tracker_type === 'gitlab') {
+    const { rows: gls } = await db.query(
+      'SELECT base_url, access_token, service_account_username FROM project_gitlab_settings WHERE project_id = $1',
+      [projectId]
+    );
+    if (gls.length > 0) {
+      project.project_gitlab_settings = gls[0];
+      project.use_project_settings = true;
+    }
+  }
+
+  // #82: Project-spezifische GitHub-Settings laden
+  if (project.issue_tracker_type === 'github') {
+    const { rows: ghs } = await db.query(
+      'SELECT base_url, access_token, service_account_username FROM project_github_settings WHERE project_id = $1',
+      [projectId]
+    );
+    if (ghs.length > 0) {
+      project.project_github_settings = ghs[0];
+      project.use_project_settings = true;
+    }
+  }
+
+  return project;
+}
+
+/**
+ * #82: Speichert project-spezifische GitLab-Settings.
+ */
+async function saveProjectGitLabSettings(projectId, { base_url, access_token, service_account_username }) {
+  const { rows } = await db.query(
+    `INSERT INTO project_gitlab_settings (project_id, base_url, access_token, service_account_username)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (project_id) DO UPDATE
+     SET base_url = EXCLUDED.base_url, access_token = EXCLUDED.access_token,
+         service_account_username = EXCLUDED.service_account_username, updated_at = NOW()
+     RETURNING *`,
+    [projectId, base_url, access_token, service_account_username || null]
+  );
   return rows[0];
+}
+
+/**
+ * #82: Speichert project-spezifische GitHub-Settings.
+ */
+async function saveProjectGitHubSettings(projectId, { base_url, access_token, service_account_username }) {
+  const { rows } = await db.query(
+    `INSERT INTO project_github_settings (project_id, base_url, access_token, service_account_username)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (project_id) DO UPDATE
+     SET base_url = EXCLUDED.base_url, access_token = EXCLUDED.access_token,
+         service_account_username = EXCLUDED.service_account_username, updated_at = NOW()
+     RETURNING *`,
+    [projectId, base_url || 'https://api.github.com', access_token, service_account_username || null]
+  );
+  return rows[0];
+}
+
+/**
+ * #82: Löscht project-spezifische Settings (fällt auf global zurück).
+ */
+async function deleteProjectTrackerSettings(projectId, trackerType) {
+  if (trackerType === 'gitlab') {
+    await db.query('DELETE FROM project_gitlab_settings WHERE project_id = $1', [projectId]);
+  } else if (trackerType === 'github') {
+    await db.query('DELETE FROM project_github_settings WHERE project_id = $1', [projectId]);
+  }
+  return true;
+}
+
+/**
+ * #82: Holt project-spezifische Settings für ein Projekt.
+ */
+async function getProjectTrackerSettings(projectId, trackerType) {
+  if (trackerType === 'gitlab') {
+    const { rows } = await db.query(
+      'SELECT base_url, access_token, service_account_username FROM project_gitlab_settings WHERE project_id = $1',
+      [projectId]
+    );
+    return rows[0] || null;
+  }
+  if (trackerType === 'github') {
+    const { rows } = await db.query(
+      'SELECT base_url, access_token, service_account_username FROM project_github_settings WHERE project_id = $1',
+      [projectId]
+    );
+    return rows[0] || null;
+  }
+  return null;
 }
 
 /**
@@ -39,14 +132,31 @@ function trackerProjectId(project) {
 /**
  * Erstellt ein Issue im externen Tracker.
  */
+/**
+ * #82: Gibt die effektiven Settings für ein Projekt zurück.
+ * Project-spezifische Settings überschreiben globale Settings.
+ */
+function getEffectiveSettings(project) {
+  if (project.use_project_settings) {
+    if (project.issue_tracker_type === 'gitlab' && project.project_gitlab_settings) {
+      return project.project_gitlab_settings;
+    }
+    if (project.issue_tracker_type === 'github' && project.project_github_settings) {
+      return project.project_github_settings;
+    }
+  }
+  return null; // null = globale Settings verwenden
+}
+
 async function createIssue(project, { title, description, labels }) {
   const name = trackerName(project);
   const projectId = trackerProjectId(project);
+  const opts = { projectSettings: getEffectiveSettings(project) };
   if (name === 'gitlab') {
-    return gitlab.createGitLabIssue(projectId, { title, description });
+    return gitlab.createGitLabIssue(projectId, { title, description }, opts);
   }
   if (name === 'github') {
-    return github.createGitHubIssue(projectId, { title, description, labels });
+    return github.createGitHubIssue(projectId, { title, description, labels }, opts);
   }
   throw new Error('Kein Issue-Tracker für dieses Projekt konfiguriert');
 }
@@ -57,11 +167,12 @@ async function createIssue(project, { title, description, labels }) {
 async function updateIssue(project, externalId, { title, description, state_event }) {
   const name = trackerName(project);
   const projectId = trackerProjectId(project);
+  const opts = { projectSettings: getEffectiveSettings(project) };
   if (name === 'gitlab') {
-    return gitlab.updateGitLabIssue(projectId, externalId, { title, description, state_event });
+    return gitlab.updateGitLabIssue(projectId, externalId, { title, description, state_event }, opts);
   }
   if (name === 'github') {
-    return github.updateGitHubIssue(projectId, externalId, { title, description, state_event });
+    return github.updateGitHubIssue(projectId, externalId, { title, description, state_event }, opts);
   }
   throw new Error('Kein Issue-Tracker für dieses Projekt konfiguriert');
 }
@@ -72,11 +183,12 @@ async function updateIssue(project, externalId, { title, description, state_even
 async function addComment(project, externalId, note) {
   const name = trackerName(project);
   const projectId = trackerProjectId(project);
+  const opts = { projectSettings: getEffectiveSettings(project) };
   if (name === 'gitlab') {
-    return gitlab.addGitLabComment(projectId, externalId, note);
+    return gitlab.addGitLabComment(projectId, externalId, note, opts);
   }
   if (name === 'github') {
-    return github.addGitHubComment(projectId, externalId, note);
+    return github.addGitHubComment(projectId, externalId, note, opts);
   }
   throw new Error('Kein Issue-Tracker für dieses Projekt konfiguriert');
 }
@@ -87,11 +199,12 @@ async function addComment(project, externalId, note) {
 async function getComments(project, externalId) {
   const name = trackerName(project);
   const projectId = trackerProjectId(project);
+  const opts = { projectSettings: getEffectiveSettings(project) };
   if (name === 'gitlab') {
-    return gitlab.getGitLabComments(projectId, externalId);
+    return gitlab.getGitLabComments(projectId, externalId, opts);
   }
   if (name === 'github') {
-    return github.getGitHubComments(projectId, externalId);
+    return github.getGitHubComments(projectId, externalId, opts);
   }
   return [];
 }
@@ -102,11 +215,12 @@ async function getComments(project, externalId) {
 async function syncIssues(project) {
   const name = trackerName(project);
   const projectId = trackerProjectId(project);
+  const opts = { projectSettings: getEffectiveSettings(project) };
   if (name === 'gitlab') {
-    return gitlab.syncProjectIssues(project.id, projectId);
+    return gitlab.syncProjectIssues(project.id, projectId, opts);
   }
   if (name === 'github') {
-    return github.syncProjectIssues(project.id, projectId);
+    return github.syncProjectIssues(project.id, projectId, opts);
   }
   return [];
 }
@@ -114,12 +228,13 @@ async function syncIssues(project) {
 /**
  * Sucht nach Projekten/Repos im externen Tracker.
  */
-async function searchProjects(trackerType, search) {
+async function searchProjects(trackerType, search, project) {
+  const opts = project ? { projectSettings: getEffectiveSettings(project) } : {};
   if (trackerType === 'gitlab') {
-    return gitlab.listGitLabProjects(search);
+    return gitlab.listGitLabProjects(search, opts);
   }
   if (trackerType === 'github') {
-    return github.listGitHubRepos(search);
+    return github.listGitHubRepos(search, opts);
   }
   return [];
 }
@@ -151,4 +266,8 @@ module.exports = {
   syncIssues,
   searchProjects,
   testConnection,
+  saveProjectGitLabSettings,
+  saveProjectGitHubSettings,
+  deleteProjectTrackerSettings,
+  getProjectTrackerSettings,
 };

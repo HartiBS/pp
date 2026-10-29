@@ -204,6 +204,36 @@
         </div>
       </form>
       <p id="github-settings-msg"></p>
+
+      <h2 style="margin-top:2rem;">Projektverwaltung (Admin)</h2>
+      <p style="color:var(--text-muted); font-size:0.875rem;">Alle Projekte bearbeiten und löschen.</p>
+      <table id="admin-project-table" style="margin-top:1rem;">
+        <thead>
+          <tr><th>Name</th><th>Owner</th><th>Status</th><th>Tracker</th><th>Tasks</th><th>Mitglieder</th><th>Aktionen</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <form id="admin-project-form" hidden style="margin-top:1rem; padding:1rem; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
+        <input type="hidden" name="id">
+        <h3>Projekt bearbeiten</h3>
+        <label>Name <input type="text" name="name" required></label>
+        <label>Beschreibung <textarea name="description"></textarea></label>
+        <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+          <label>Status
+            <select name="status">
+              <option value="active">Aktiv</option>
+              <option value="paused">Pausiert</option>
+              <option value="done">Abgeschlossen</option>
+              <option value="archived">Archiviert</option>
+            </select>
+          </label>
+          <label>Owner <select name="owner_id" id="admin-project-owner-select" required></select></label>
+        </div>
+        <div style="display:flex; gap:0.75rem; margin-top:0.5rem;">
+          <button type="submit">Speichern</button>
+          <button type="button" id="admin-project-cancel-btn" class="btn-secondary">Abbrechen</button>
+        </div>
+      </form>
     </section>
 
     <section id="gitlab-projects-view" hidden>
@@ -336,6 +366,9 @@
           <label id="push-gitlab-label" hidden style="flex-direction:row; align-items:center; gap:0.35rem; font-size:0.875rem;">
             <input type="checkbox" name="push_to_gitlab"> Auch in GitLab anlegen
           </label>
+          <label id="auto-sync-label" hidden style="flex-direction:row; align-items:center; gap:0.35rem; font-size:0.875rem;">
+            <input type="checkbox" name="auto_sync"> Auto-Sync mit Tracker
+          </label>
           <button type="submit">+ Hinzufügen</button>
         </form>
         <ul id="task-list"></ul>
@@ -389,6 +422,21 @@
         <div id="tracker-search-results" hidden style="margin-top:0.5rem; max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:6px;">
           <ul id="tracker-search-list" class="dash-list"></ul>
         </div>
+        <div id="project-tracker-settings-block" hidden style="margin-top:1rem;">
+          <h4>Eigene Verbindung für dieses Projekt</h4>
+          <p style="color:var(--text-muted); font-size:0.8rem;">Überschreibt die globalen Einstellungen nur für dieses Projekt.</p>
+          <form id="project-tracker-settings-form">
+            <label>API-URL <input type="url" name="base_url" placeholder="https://..." required></label>
+            <label>Access Token <input type="password" name="access_token" required></label>
+            <label>Service-Account (optional) <input type="text" name="service_account_username"></label>
+            <div style="display:flex; gap:0.5rem;">
+              <button type="submit">Speichern</button>
+              <button type="button" id="delete-project-tracker-settings-btn" class="btn-secondary">Auf global zurücksetzen</button>
+            </div>
+          </form>
+          <p id="project-tracker-settings-msg"></p>
+        </div>
+        <button type="button" id="toggle-project-tracker-settings-btn" class="btn-small btn-secondary">⚙ Eigene Verbindung</button>
         <div id="milestone-block" style="margin-top:1rem;" hidden>
           <h4>Meilensteine <button type="button" id="sync-milestones-btn" class="btn-secondary">Synchronisieren</button></h4>
           <ul id="milestone-list" class="dash-list"></ul>
@@ -561,8 +609,11 @@
             <h4>Zusatzfelder</h4>
             <div id="td-custom-fields-inputs"></div>
           </div>
-          <div style="display:flex; gap:0.75rem; margin-top:0.5rem;">
+          <div style="display:flex; gap:0.75rem; margin-top:0.5rem; align-items:center;">
             <button type="submit">Speichern</button>
+            <label id="td-auto-sync-label" hidden style="flex-direction:row; align-items:center; gap:0.35rem; font-size:0.875rem;">
+              <input type="checkbox" name="auto_sync"> Auto-Sync mit Tracker
+            </label>
             <button type="button" id="td-delete-btn" class="btn-secondary" style="margin-left:auto;">🗑 Task löschen</button>
           </div>
         </form>
@@ -595,6 +646,6 @@
     </section>
   </main>
 
-  <script src="/js/app.js?v=4"></script>
+  <script src="/js/app.js?v=5"></script>
 </body>
 </html>
