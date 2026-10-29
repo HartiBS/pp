@@ -275,4 +275,84 @@ router.delete('/custom-fields/:id', async (req, res) => {
   }
 });
 
+// ===== Issue #81: Admin-Projektverwaltung =====
+
+router.get('/projects', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT p.*, u.name AS owner_name,
+              (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
+              (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS member_count
+       FROM projects p
+       JOIN users u ON u.id = p.owner_id
+       ORDER BY p.updated_at DESC`
+    );
+    res.json({ projects: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.put('/projects/:id', async (req, res) => {
+  const { name, description, status, owner_id } = req.body;
+  try {
+    // Validate status
+    if (status !== undefined && !['active', 'paused', 'done', 'archived'].includes(status)) {
+      return res.status(400).json({ error: 'Ungültiger Status' });
+    }
+    // Validate owner exists and is active
+    if (owner_id !== undefined) {
+      const ownerCheck = await db.query('SELECT id FROM users WHERE id = $1 AND is_active = TRUE', [owner_id]);
+      if (ownerCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'Owner nicht gefunden oder deaktiviert' });
+      }
+    }
+    const { rows } = await db.query(
+      `UPDATE projects
+       SET name = COALESCE($1, name),
+           description = COALESCE($2, description),
+           status = COALESCE($3, status),
+           owner_id = COALESCE($4, owner_id),
+           updated_at = NOW()
+       WHERE id = $5
+       RETURNING *`,
+      [name, description, status, owner_id, req.params.id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    }
+    res.json({ project: rows[0] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.delete('/projects/:id', async (req, res) => {
+  try {
+    const { rowCount } = await db.query('DELETE FROM projects WHERE id = $1', [req.params.id]);
+    if (rowCount === 0) {
+      return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// GET: Alle aktiven User für Owner-Auswahl
+router.get('/projects-users', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      'SELECT id, name, username, email FROM users WHERE is_active = TRUE ORDER BY name ASC'
+    );
+    res.json({ users: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
 module.exports = router;
