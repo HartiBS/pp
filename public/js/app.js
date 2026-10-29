@@ -2058,7 +2058,7 @@ const _origLoadAdmin = typeof loadAdmin !== 'undefined' ? loadAdmin : null;
 if (_origLoadAdmin) {
   window.loadAdmin = async function() {
     await _origLoadAdmin();
-    await loadCustomFieldDefinitions();
+    try { await loadCustomFieldDefinitions(); } catch (e) { console.error('loadCustomFieldDefinitions:', e.message); }
   };
 }
 
@@ -2066,7 +2066,7 @@ if (_origLoadAdmin) {
 const _origLoadProject = loadProject;
 loadProject = async function(id) {
   await _origLoadProject(id);
-  await loadProjectCustomFields(id);
+  try { await loadProjectCustomFields(id); } catch (e) { console.error('loadProjectCustomFields:', e.message); }
 };
 
 /* ===== INIT CUSTOM FIELD EVENTS ===== */
@@ -2384,15 +2384,16 @@ function renderTrackerSearchResults(projects, type) {
 const _origLoadProjectTracker = loadProject;
 loadProject = async function(id) {
   await _origLoadProjectTracker(id);
-  await loadProjectTracker(id);
+  try { await loadProjectTracker(id); } catch (e) { console.error('loadProjectTracker:', e.message); }
 };
 
 /* ===== HOOK INTO loadAdmin ===== */
 const _origLoadAdminGh = typeof loadAdmin !== 'undefined' ? loadAdmin : null;
 if (_origLoadAdminGh) {
+  const _prevLoadAdminGh = window.loadAdmin || _origLoadAdminGh;
   window.loadAdmin = async function() {
-    await _origLoadAdminGh();
-    await loadGitHubSettings();
+    await _prevLoadAdminGh();
+    try { await loadGitHubSettings(); } catch (e) { console.error('loadGitHubSettings:', e.message); }
   };
 }
 
@@ -2622,10 +2623,10 @@ function hideSyncIndicator() {
 // Hook: loadAdmin -> auch Projekte laden (#81)
 const _origLoadAdminFinal = typeof loadAdmin !== 'undefined' ? loadAdmin : null;
 if (_origLoadAdminFinal) {
-  const _prevLoadAdmin = window.loadAdmin || _origLoadAdminFinal;
+  const _prevLoadAdmin2 = window.loadAdmin || _origLoadAdminFinal;
   window.loadAdmin = async function() {
-    await _prevLoadAdmin();
-    await loadAdminProjects();
+    await _prevLoadAdmin2();
+    try { await loadAdminProjects(); } catch (e) { console.error('loadAdminProjects:', e.message); }
   };
 }
 
@@ -2634,11 +2635,13 @@ const _origLoadProjectFinal = loadProject;
 loadProject = async function(id) {
   await _origLoadProjectFinal(id);
   // #80: Sync-Indikator anzeigen waehrend Backend-Sync laeuft
-  const tracker = state.currentTracker;
-  if (tracker && tracker.configured) showSyncIndicator();
-  await loadProjectTrackerSettings(id);
-  // Indikator nach kurzer Zeit ausblenden (Backend-Sync ist best-effort)
-  setTimeout(hideSyncIndicator, 3000);
+  try {
+    const tracker = state.currentTracker;
+    if (tracker && tracker.configured) showSyncIndicator();
+    await loadProjectTrackerSettings(id);
+    // Indikator nach kurzer Zeit ausblenden (Backend-Sync ist best-effort)
+    setTimeout(hideSyncIndicator, 3000);
+  } catch (e) { console.error('loadProjectTrackerSettings:', e.message); }
 };
 
 /* ===== INIT ===== */
