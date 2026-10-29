@@ -8,6 +8,7 @@ const projectRoutes = require('./routes/projects');
 const adminRoutes = require('./routes/admin');
 const gitlabRoutes = require('./routes/gitlab');
 const githubRoutes = require('./routes/github');
+const syncRoutes = require('./routes/sync');
 const notificationRoutes = require('./routes/notifications');
 const { loadUser } = require('./middleware/auth');
 const { generateCsrfToken, requireCsrf } = require('./middleware/csrf');
@@ -51,6 +52,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/gitlab', gitlabRoutes);
 app.use('/api/github', githubRoutes);
+app.use('/api/sync', syncRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));

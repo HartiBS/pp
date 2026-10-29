@@ -1150,3 +1150,43 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 #toggle-project-tracker-settings-btn {
   margin-top: 0.5rem;
 }
+
+/* ===== Sync-Einstellungen-Seite ===== */
+#sync-view h2 {
+  margin-bottom: 0.5rem;
+}
+
+.sync-card h3 {
+  font-size: 1.1rem;
+}
+
+#sync-gitlab-form label,
+#sync-github-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+#sync-gitlab-form input,
+#sync-github-form input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+#sync-project-table th {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+#sync-project-table tbody tr:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.03));
+}

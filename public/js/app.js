@@ -72,7 +72,7 @@ function setUser(user) {
   if (adminBtn) adminBtn.hidden = !(user.roles || []).includes('admin');
 }
 
-const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view', 'gitlab-projects-view', 'task-detail-view'];
+const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'sync-view', 'gitlab-issue-view', 'gitlab-projects-view', 'task-detail-view'];
 
 function show(viewId) {
   for (const id of VIEWS) {
@@ -592,11 +592,15 @@ async function loadProject(id) {
   loadMilestones(id);
 
   const gitlabBlock = $('#gitlab-block');
-  gitlabBlock.hidden = false;
-  $('#gitlab-project-id-input').value = project.gitlab_project_id || '';
-  $('#sync-gitlab-btn').disabled = !project.gitlab_project_id;
-  $('#new-gitlab-issue-btn').hidden = readonly || !project.gitlab_project_id;
-  $('#push-gitlab-label').hidden = !project.gitlab_project_id;
+  if (gitlabBlock) gitlabBlock.hidden = false;
+  const glProjectIdInput = $('#gitlab-project-id-input');
+  if (glProjectIdInput) glProjectIdInput.value = project.gitlab_project_id || '';
+  const syncGitlabBtn = $('#sync-gitlab-btn');
+  if (syncGitlabBtn) syncGitlabBtn.disabled = !project.gitlab_project_id;
+  const newGitlabIssueBtn = $('#new-gitlab-issue-btn');
+  if (newGitlabIssueBtn) newGitlabIssueBtn.hidden = readonly || !project.gitlab_project_id;
+  const pushGitlabLabel = $('#push-gitlab-label');
+  if (pushGitlabLabel) pushGitlabLabel.hidden = !project.gitlab_project_id;
   // #83: Auto-Sync-Checkbox anzeigen, wenn Tracker konfiguriert
   const hasTracker = !!(project.issue_tracker_type && project.issue_tracker_type !== 'none' &&
     (project.gitlab_project_id || project.github_repo));
@@ -2647,3 +2651,185 @@ loadProject = async function(id) {
 /* ===== INIT ===== */
 bindAdminProjectEvents();
 bindProjectTrackerSettingsEvents();
+
+/* ============================================================
+ * Sync-Einstellungen-Seite (zentrale Übersicht)
+ * ============================================================ */
+
+async function loadSyncView() {
+  try {
+    const status = await api('/api/sync/status');
+    renderSyncStatus(status);
+  } catch (err) {
+    console.error('Sync-Status konnte nicht geladen werden:', err.message);
+  }
+  await loadSyncProjectList();
+  show('sync-view');
+}
+
+function renderSyncStatus(status) {
+  const isAdmin = status.is_admin;
+
+  // GitLab card
+  const glBadge = $('#sync-gitlab-status-badge');
+  const glInfo = $('#sync-gitlab-info');
+  const glAdminBlock = $('#sync-gitlab-admin-block');
+  if (status.gitlab.configured) {
+    glBadge.textContent = '\u2705 Konfiguriert';
+    glBadge.className = 'badge badge-active';
+    glInfo.textContent = `URL: ${status.gitlab.base_url}${status.gitlab.service_account_username ? ' | Service-Account: @' + status.gitlab.service_account_username : ''}`;
+  } else {
+    glBadge.textContent = '\u274c Nicht konfiguriert';
+    glBadge.className = 'badge badge-todo';
+    glInfo.textContent = status.gitlab.base_url ? `URL: ${status.gitlab.base_url} (kein Token)` : 'Noch keine GitLab-Verbindung eingerichtet.';
+  }
+  glAdminBlock.hidden = !isAdmin;
+  if (isAdmin && status.gitlab.configured) {
+    const form = $('#sync-gitlab-form');
+    if (form) {
+      form.elements['base_url'].value = status.gitlab.base_url || '';
+      form.elements['access_token'].value = '';
+      form.elements['service_account_username'].value = status.gitlab.service_account_username || '';
+    }
+  }
+
+  // GitHub card
+  const ghBadge = $('#sync-github-status-badge');
+  const ghInfo = $('#sync-github-info');
+  const ghAdminBlock = $('#sync-github-admin-block');
+  if (status.github.configured) {
+    ghBadge.textContent = '\u2705 Konfiguriert';
+    ghBadge.className = 'badge badge-active';
+    ghInfo.textContent = `URL: ${status.github.base_url}${status.github.service_account_username ? ' | Service-Account: @' + status.github.service_account_username : ''}`;
+  } else {
+    ghBadge.textContent = '\u274c Nicht konfiguriert';
+    ghBadge.className = 'badge badge-todo';
+    ghInfo.textContent = 'Noch keine GitHub-Verbindung eingerichtet.';
+  }
+  ghAdminBlock.hidden = !isAdmin;
+  if (isAdmin && status.github.configured) {
+    const form = $('#sync-github-form');
+    if (form) {
+      form.elements['base_url'].value = status.github.base_url || '';
+      form.elements['access_token'].value = '';
+      form.elements['service_account_username'].value = status.github.service_account_username || '';
+    }
+  }
+}
+
+async function loadSyncProjectList() {
+  const tbody = $('#sync-project-table tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Laden...</td></tr>';
+  try {
+    const { projects } = await api('/api/projects');
+    const withTracker = (projects || []).filter(p =>
+      p.issue_tracker_type && p.issue_tracker_type !== 'none' && (p.gitlab_project_id || p.github_repo)
+    );
+    tbody.innerHTML = '';
+    if (withTracker.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);">Keine Projekte mit Tracker konfiguriert.</td></tr>';
+      return;
+    }
+    for (const p of withTracker) {
+      const tr = document.createElement('tr');
+      const trackerLabel = p.issue_tracker_type === 'gitlab' ? 'GitLab' : 'GitHub';
+      const targetLabel = p.issue_tracker_type === 'gitlab' ? `Projekt-ID ${p.gitlab_project_id}` : p.github_repo;
+      // Prüfen ob projekt-spezifische Settings existieren
+      let customConn = '\u2013 (global)';
+      try {
+        const s = await api(`/api/projects/${p.id}/tracker/settings`);
+        if (s.has_project_settings) customConn = '\u2705 Eigene Verbindung';
+      } catch (e) { /* ignorieren */ }
+      tr.innerHTML = `
+        <td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--border);">${escapeHtml(p.name)}</td>
+        <td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--border);">${trackerLabel} <small style="color:var(--text-muted);">(${escapeHtml(targetLabel)})</small></td>
+        <td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--border);">${customConn}</td>
+        <td style="padding:0.4rem 0.6rem; border-bottom:1px solid var(--border);">
+          <button class="btn-small open-project-btn">\u00d6ffnen</button>
+        </td>`;
+      tr.querySelector('.open-project-btn').onclick = () => loadProject(p.id);
+      tbody.appendChild(tr);
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--danger);">Fehler: ${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+function bindSyncViewEvents() {
+  bind('#sync-btn', () => loadSyncView());
+  bind('#sync-back-btn', () => loadDashboard());
+
+  // GitLab form submit
+  bind('submit', async (e) => {
+    if (e.target.id === 'sync-gitlab-form') {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const msgEl = $('#sync-gitlab-msg');
+      try {
+        await api('/api/gitlab/settings', {
+          method: 'PUT',
+          body: {
+            base_url: fd.get('base_url'),
+            access_token: fd.get('access_token'),
+            service_account_username: fd.get('service_account_username') || null,
+          },
+        });
+        if (msgEl) { msgEl.textContent = '\u2705 Gespeichert'; msgEl.style.color = 'var(--success, #4caf50)'; }
+        e.target.elements['access_token'].value = '';
+        await loadSyncView();
+      } catch (err) {
+        if (msgEl) { msgEl.textContent = err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
+      }
+    }
+  });
+
+  // GitHub form submit
+  bind('submit', async (e) => {
+    if (e.target.id === 'sync-github-form') {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const msgEl = $('#sync-github-msg');
+      try {
+        await api('/api/github/settings', {
+          method: 'PUT',
+          body: {
+            base_url: fd.get('base_url'),
+            access_token: fd.get('access_token'),
+            service_account_username: fd.get('service_account_username') || null,
+          },
+        });
+        if (msgEl) { msgEl.textContent = '\u2705 Gespeichert'; msgEl.style.color = 'var(--success, #4caf50)'; }
+        e.target.elements['access_token'].value = '';
+        await loadSyncView();
+      } catch (err) {
+        if (msgEl) { msgEl.textContent = err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
+      }
+    }
+  });
+
+  // Test buttons
+  bind('#sync-gitlab-test-btn', async () => {
+    const msgEl = $('#sync-gitlab-msg');
+    if (msgEl) { msgEl.textContent = 'Teste...'; msgEl.style.color = 'var(--text-muted)'; }
+    try {
+      const r = await api('/api/sync/test/gitlab', { method: 'POST' });
+      if (msgEl) { msgEl.textContent = `\u2705 Verbindung OK: @${r.user.username} (${r.user.name || r.user.username})`; msgEl.style.color = 'var(--success, #4caf50)'; }
+    } catch (err) {
+      if (msgEl) { msgEl.textContent = '\u274c ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
+    }
+  });
+
+  bind('#sync-github-test-btn', async () => {
+    const msgEl = $('#sync-github-msg');
+    if (msgEl) { msgEl.textContent = 'Teste...'; msgEl.style.color = 'var(--text-muted)'; }
+    try {
+      const r = await api('/api/sync/test/github', { method: 'POST' });
+      if (msgEl) { msgEl.textContent = `\u2705 Verbindung OK: @${r.user.username} (${r.user.name || r.user.username})`; msgEl.style.color = 'var(--success, #4caf50)'; }
+    } catch (err) {
+      if (msgEl) { msgEl.textContent = '\u274c ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
+    }
+  });
+}
+
+bindSyncViewEvents();
