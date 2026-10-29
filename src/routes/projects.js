@@ -11,6 +11,7 @@ const taskSubtasks = require('../utils/taskSubtasks');
 const customFields = require('../utils/customFields');
 const taskMarkdown = require('../utils/taskMarkdown');
 const taskRelations = require('../utils/taskRelations');
+const issueTracker = require('../utils/issueTracker');
 
 const router = express.Router();
 
@@ -88,27 +89,78 @@ router.get('/:id', loadProjectRole, requireProjectPermission('view_project'), as
 });
 
 router.put('/:id', loadProjectRole, requireProjectPermission('edit_project'), async (req, res) => {
-  const { name, description, status } = req.body;
-  const resetGitlab = req.body.gitlab_project_id === null || req.body.gitlab_project_id === '';
+  const { name, description, status, issue_tracker_type, gitlab_project_id, github_repo } = req.body;
+
+  // #77: Tracker-Typ validieren
+  let trackerType = null;
+  if (issue_tracker_type !== undefined) {
+    if (!['none', 'gitlab', 'github'].includes(issue_tracker_type)) {
+      return res.status(400).json({ error: 'Ungültiger Tracker-Typ. Erlaubt: none, gitlab, github' });
+    }
+    trackerType = issue_tracker_type;
+  }
+
+  const resetGitlab = gitlab_project_id === null || gitlab_project_id === '';
   let gitlabId = null;
-  if (!resetGitlab && req.body.gitlab_project_id !== undefined) {
-    const n = Number(req.body.gitlab_project_id);
+  if (!resetGitlab && gitlab_project_id !== undefined) {
+    const n = Number(gitlab_project_id);
     if (!Number.isInteger(n)) {
       return res.status(400).json({ error: 'gitlab_project_id muss eine ganze Zahl sein' });
     }
     gitlabId = n;
   }
+
+  // #77: github_repo validieren (Format: owner/repo)
+  let githubRepo = null;
+  if (github_repo !== undefined) {
+    if (github_repo === null || github_repo === '') {
+      githubRepo = null;
+    } else if (typeof github_repo === 'string' && /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(github_repo.trim())) {
+      githubRepo = github_repo.trim();
+    } else {
+      return res.status(400).json({ error: 'github_repo muss das Format "owner/repo" haben' });
+    }
+  }
+
   try {
+    // #77: Beim Tracker-Wechsel die jeweils andere Verknüpfung zurücksetzen
+    let effectiveGitlabId = gitlabId;
+    let effectiveGithubRepo = githubRepo;
+    let effectiveTrackerType = trackerType;
+
+    if (trackerType !== null) {
+      const current = await db.query(
+        'SELECT issue_tracker_type, gitlab_project_id, github_repo FROM projects WHERE id = $1',
+        [req.params.id]
+      );
+      if (current.rows.length > 0) {
+        const prevType = current.rows[0].issue_tracker_type || 'none';
+        if (prevType !== trackerType) {
+          // Tracker gewechselt — bisherige Verknüpfung löschen
+          if (trackerType !== 'gitlab') effectiveGitlabId = null;
+          if (trackerType !== 'github') effectiveGithubRepo = null;
+        }
+      }
+    }
+
     const { rows } = await db.query(
       `UPDATE projects
        SET name = COALESCE($1, name),
            description = COALESCE($2, description),
            status = COALESCE($3, status),
-           gitlab_project_id = CASE WHEN $4 THEN NULL WHEN $5::int IS NULL THEN gitlab_project_id ELSE $5::int END,
+           issue_tracker_type = COALESCE($4, issue_tracker_type),
+           gitlab_project_id = CASE WHEN $5 THEN NULL WHEN $6::int IS NULL THEN gitlab_project_id ELSE $6::int END,
+           github_repo = CASE WHEN $7 THEN NULL WHEN $8 IS NULL THEN github_repo ELSE $8 END,
            updated_at = NOW()
-       WHERE id = $6
+       WHERE id = $9
        RETURNING *`,
-      [name, description, status, resetGitlab, gitlabId, req.params.id]
+      [
+        name, description, status,
+        effectiveTrackerType,
+        effectiveGitlabId === null && gitlab_project_id !== undefined, effectiveGitlabId,
+        effectiveGithubRepo === null && github_repo !== undefined, effectiveGithubRepo,
+        req.params.id,
+      ]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Projekt nicht gefunden' });
@@ -165,30 +217,34 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
     }
 
     let gitlabIid = null;
-    // #57: Task direkt als GitLab-Issue anlegen (wenn verknüpft und gewünscht)
-    if (push_to_gitlab && gitlabProjectId) {
+    // #57/#77: Task direkt als Issue im externen Tracker anlegen (wenn gewünscht)
+    if (push_to_gitlab) {
       try {
-        // #72: Task als Markdown für GitLab serialisieren
-        const activeCfDefs = await customFields.getProjectFieldDefinitions(req.params.id);
-        const mdDescription = taskMarkdown.taskToMarkdown(
-          {
-            title, description: description || '', status: 'todo',
-            priority: taskPriority, issue_type: issue_type || 'task',
-            labels: Array.isArray(labels) ? labels : [],
-            due_date: due_date || null, estimated_hours: estHours, spent_hours: 0,
-            custom_fields: cleanedCustomFields,
-          },
-          { customFieldDefs: activeCfDefs, subtasks: [] }
-        );
-        const created = await gitlab.createGitLabIssue(gitlabProjectId, { title, description: mdDescription });
-        gitlabIid = created.gitlab_iid;
-        await db.query(
-          `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-          [req.params.id, created.gitlab_iid, created.title, created.description, created.state, created.web_url]
-        );
-      } catch (gitlabErr) {
-        console.error('GitLab-Push fehlgeschlagen (Task-Anlegen):', gitlabErr.message);
+        const tracker = await issueTracker.getProjectTracker(req.params.id);
+        const trackerProjectId = issueTracker.trackerProjectId(tracker);
+        if (trackerProjectId) {
+          // #72: Task als Markdown serialisieren
+          const activeCfDefs = await customFields.getProjectFieldDefinitions(req.params.id);
+          const mdDescription = taskMarkdown.taskToMarkdown(
+            {
+              title, description: description || '', status: 'todo',
+              priority: taskPriority, issue_type: issue_type || 'task',
+              labels: Array.isArray(labels) ? labels : [],
+              due_date: due_date || null, estimated_hours: estHours, spent_hours: 0,
+              custom_fields: cleanedCustomFields,
+            },
+            { customFieldDefs: activeCfDefs, subtasks: [] }
+          );
+          const created = await issueTracker.createIssue(tracker, { title, description: mdDescription, labels: Array.isArray(labels) ? labels : [] });
+          gitlabIid = created.gitlab_iid;
+          await db.query(
+            `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
+             VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+            [req.params.id, created.gitlab_iid, created.title, created.description, created.state, created.web_url]
+          );
+        }
+      } catch (trackerErr) {
+        console.error('Tracker-Push fehlgeschlagen (Task-Anlegen):', trackerErr.message);
       }
     }
 
@@ -322,42 +378,45 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
     // US-24: Historie – Änderungen protokollieren
     await taskHistory.logTaskDiff(updatedTask.id, req.session.userId, oldTask, updatedTask);
 
-    // #57: Änderungen an verknüpfte GitLab-Issues pushen
-    if (gitlabIid && gitlabProjectId) {
-      const gitlabUpdate = {};
-      if (title) gitlabUpdate.title = title;
-      // #72: Beschreibung als Markdown serialisieren (strukturierte Felder eingebettet)
-      if (description !== undefined || status !== undefined || priority !== undefined ||
-          estimated_hours !== undefined || spent_hours !== undefined || custom_fields !== undefined) {
-        const activeCfDefs = await customFields.getProjectFieldDefinitions(req.params.id);
-        const subtasks = await taskSubtasks.getSubtasks(updatedTask.id);
-        // #74: Parent/Child/Related in Markdown einbetten
-        const [parent, children, related] = await Promise.all([
-          taskRelations.getParent(updatedTask.id),
-          taskRelations.getChildren(updatedTask.id),
-          taskRelations.getRelatedTasks(updatedTask.id),
-        ]);
-        gitlabUpdate.description = taskMarkdown.taskToMarkdown(updatedTask, {
-          customFieldDefs: activeCfDefs, subtasks, parent, children, related,
-        });
-      }
-      if (status && status !== oldStatus) {
-        gitlabUpdate.state_event = status === 'done' ? 'close' : 'reopen';
-      }
-      if (Object.keys(gitlabUpdate).length > 0) {
-        try {
-          const updated = await gitlab.updateGitLabIssue(gitlabProjectId, gitlabIid, gitlabUpdate);
-          await db.query(
-            `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
-             VALUES ($1, $2, $3, $4, $5, $6, NOW())
-             ON CONFLICT (project_id, gitlab_iid) DO UPDATE
-             SET title = EXCLUDED.title, description = EXCLUDED.description,
-                 state = EXCLUDED.state, synced_at = NOW()`,
-            [req.params.id, gitlabIid, updated.title, updated.description, updated.state, updated.web_url]
-          );
-        } catch (gitlabErr) {
-          console.error('GitLab-Push fehlgeschlagen (Task-Update):', gitlabErr.message);
+    // #57/#77: Änderungen an verknüpfte Issues im externen Tracker pushen
+    if (gitlabIid) {
+      try {
+        const tracker = await issueTracker.getProjectTracker(req.params.id);
+        const trackerProjectId = issueTracker.trackerProjectId(tracker);
+        if (trackerProjectId) {
+          const trackerUpdate = {};
+          if (title) trackerUpdate.title = title;
+          // #72: Beschreibung als Markdown serialisieren
+          if (description !== undefined || status !== undefined || priority !== undefined ||
+              estimated_hours !== undefined || spent_hours !== undefined || custom_fields !== undefined) {
+            const activeCfDefs = await customFields.getProjectFieldDefinitions(req.params.id);
+            const subtasks = await taskSubtasks.getSubtasks(updatedTask.id);
+            const [parent, children, related] = await Promise.all([
+              taskRelations.getParent(updatedTask.id),
+              taskRelations.getChildren(updatedTask.id),
+              taskRelations.getRelatedTasks(updatedTask.id),
+            ]);
+            trackerUpdate.description = taskMarkdown.taskToMarkdown(updatedTask, {
+              customFieldDefs: activeCfDefs, subtasks, parent, children, related,
+            });
+          }
+          if (status && status !== oldStatus) {
+            trackerUpdate.state_event = status === 'done' ? 'close' : 'reopen';
+          }
+          if (Object.keys(trackerUpdate).length > 0) {
+            const updated = await issueTracker.updateIssue(tracker, gitlabIid, trackerUpdate);
+            await db.query(
+              `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW())
+               ON CONFLICT (project_id, gitlab_iid) DO UPDATE
+               SET title = EXCLUDED.title, description = EXCLUDED.description,
+                   state = EXCLUDED.state, synced_at = NOW()`,
+              [req.params.id, gitlabIid, updated.title, updated.description, updated.state, updated.web_url]
+            );
+          }
         }
+      } catch (trackerErr) {
+        console.error('Tracker-Push fehlgeschlagen (Task-Update):', trackerErr.message);
       }
     }
 
@@ -466,20 +525,23 @@ router.post('/:id/tasks/:taskId/comments', loadProjectRole, requireProjectPermis
       }
     }
 
-    // GitLab-Push wenn verknüpft
-    const gitlabInfo = await db.query(
-      'SELECT t.gitlab_iid, p.gitlab_project_id FROM tasks t JOIN projects p ON p.id = t.project_id WHERE t.id = $1',
+    // #77: Kommentar an externen Tracker pushen (GitLab oder GitHub)
+    const trackerInfo = await db.query(
+      `SELECT t.gitlab_iid, p.issue_tracker_type, p.gitlab_project_id, p.github_repo
+       FROM tasks t JOIN projects p ON p.id = t.project_id WHERE t.id = $1`,
       [req.params.taskId]
     );
-    if (gitlabInfo.rows[0]?.gitlab_iid && gitlabInfo.rows[0]?.gitlab_project_id) {
+    if (trackerInfo.rows[0]?.gitlab_iid) {
       try {
-        await gitlab.addGitLabComment(
-          gitlabInfo.rows[0].gitlab_project_id,
-          gitlabInfo.rows[0].gitlab_iid,
-          `**${req.currentUser.name}** (PP): ${body.trim()}`
-        );
-      } catch (gitlabErr) {
-        console.error('GitLab-Kommentar fehlgeschlagen:', gitlabErr.message);
+        const tracker = {
+          id: req.params.id,
+          issue_tracker_type: trackerInfo.rows[0].issue_tracker_type,
+          gitlab_project_id: trackerInfo.rows[0].gitlab_project_id,
+          github_repo: trackerInfo.rows[0].github_repo,
+        };
+        await issueTracker.addComment(tracker, trackerInfo.rows[0].gitlab_iid, `**${req.currentUser.name}** (PP): ${body.trim()}`);
+      } catch (trackerErr) {
+        console.error('Tracker-Kommentar fehlgeschlagen:', trackerErr.message);
       }
     }
 
@@ -813,6 +875,62 @@ router.get('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('view
 });
 
 
+
+// ===== Issue #77/#78: Unified Tracker API (GitLab/GitHub) =====
+
+// GET: Tracker-Info eines Projekts
+router.get('/:id/tracker', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const tracker = await issueTracker.getProjectTracker(req.params.id);
+    if (!tracker) {
+      return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    }
+    res.json({
+      type: tracker.issue_tracker_type || 'none',
+      gitlab_project_id: tracker.gitlab_project_id,
+      github_repo: tracker.github_repo,
+      configured: !!issueTracker.trackerProjectId(tracker),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// POST: Sync Issues vom externen Tracker
+router.post('/:id/tracker/sync', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const tracker = await issueTracker.getProjectTracker(req.params.id);
+    if (!tracker || !issueTracker.trackerProjectId(tracker)) {
+      return res.status(400).json({ error: 'Projekt ist nicht mit einem externen Tracker verknüpft' });
+    }
+    const issues = await issueTracker.syncIssues(tracker);
+    res.json({ issues });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// GET: Suche nach Projekten/Repos im externen Tracker (#78)
+router.get('/:id/tracker/search', loadProjectRole, requireProjectPermission('edit_project'), async (req, res) => {
+  try {
+    const tracker = await issueTracker.getProjectTracker(req.params.id);
+    if (!tracker) {
+      return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    }
+    const type = tracker.issue_tracker_type || 'none';
+    if (type === 'none') {
+      return res.json({ projects: [], type: 'none' });
+    }
+    const search = req.query.q || '';
+    const projects = await issueTracker.searchProjects(type, search);
+    res.json({ projects, type });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
 
 // ===== Issue #71: Custom Fields pro Projekt =====
 

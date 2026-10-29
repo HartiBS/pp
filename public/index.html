@@ -190,6 +190,20 @@
         </thead>
         <tbody></tbody>
       </table>
+
+      <h2 style="margin-top:2rem;">GitHub-Verbindung</h2>
+      <form id="github-settings-form">
+        <label>GitHub API-URL <input type="url" name="base_url" placeholder="https://api.github.com" required></label>
+        <label>Access Token <input type="password" name="access_token" required></label>
+        <label>Service-Account Benutzername (optional)
+          <input type="text" name="service_account_username" placeholder="z. B. pp-bot">
+        </label>
+        <div style="display:flex; gap:0.75rem;">
+          <button type="submit">Speichern</button>
+          <button type="button" id="test-github-btn" class="btn-secondary">Verbindung testen</button>
+        </div>
+      </form>
+      <p id="github-settings-msg"></p>
     </section>
 
     <section id="gitlab-projects-view" hidden>
@@ -353,15 +367,28 @@
       </div>
 
       <div id="gitlab-block" style="margin-top:2rem;" hidden>
-        <h3>GitLab-Issues</h3>
-        <form id="gitlab-project-form" style="flex-direction:row; flex-wrap:wrap; align-items:center;">
-          <label style="flex-direction:row; align-items:center; gap:0.5rem;">GitLab-Projekt-ID
+        <h3 id="tracker-block-title">Issue-Tracker</h3>
+        <form id="tracker-project-form" style="flex-direction:row; flex-wrap:wrap; align-items:center; gap:0.5rem;">
+          <label style="flex-direction:row; align-items:center; gap:0.5rem;">Tracker
+            <select name="issue_tracker_type" id="tracker-type-select">
+              <option value="none">Keiner</option>
+              <option value="gitlab">GitLab</option>
+              <option value="github">GitHub</option>
+            </select>
+          </label>
+          <label id="gitlab-id-label" style="flex-direction:row; align-items:center; gap:0.5rem;" hidden>GitLab-Projekt-ID
             <input type="number" name="gitlab_project_id" id="gitlab-project-id-input" placeholder="z. B. 42" style="width:120px;">
           </label>
-          <button type="submit">Verknüpfen</button>
-          <button type="button" id="pick-gitlab-project-btn" class="btn-secondary">Aus GitLab wählen</button>
-          <button type="button" id="sync-gitlab-btn" class="btn-secondary">Synchronisieren</button>
+          <label id="github-repo-label" style="flex-direction:row; align-items:center; gap:0.5rem;" hidden>GitHub-Repo
+            <input type="text" name="github_repo" id="github-repo-input" placeholder="owner/repo" style="width:180px;">
+          </label>
+          <button type="submit">Speichern</button>
+          <button type="button" id="pick-tracker-project-btn" class="btn-secondary" hidden>Repository suchen</button>
+          <button type="button" id="sync-tracker-btn" class="btn-secondary" hidden>Synchronisieren</button>
         </form>
+        <div id="tracker-search-results" hidden style="margin-top:0.5rem; max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:6px;">
+          <ul id="tracker-search-list" class="dash-list"></ul>
+        </div>
         <div id="milestone-block" style="margin-top:1rem;" hidden>
           <h4>Meilensteine <button type="button" id="sync-milestones-btn" class="btn-secondary">Synchronisieren</button></h4>
           <ul id="milestone-list" class="dash-list"></ul>

@@ -2201,3 +2201,185 @@ renderTaskDetail = function(data) {
 
 /* Init relation events */
 bindRelationEvents();
+
+/* ===== ISSUE #77/#78: GITHUB/GITLAB TRACKER ===== */
+
+/* ===== ADMIN: GitHub Settings ===== */
+async function loadGitHubSettings() {
+  try {
+    const s = await api('/api/github/settings');
+    if (s.configured) {
+      $('#github-settings-form').base_url.value = s.base_url || '';
+      $('#github-settings-form').access_token.value = '';
+      $('#github-settings-form').service_account_username.value = s.service_account_username || '';
+    }
+  } catch (err) {
+    console.error('GitHub-Settings laden fehlgeschlagen:', err.message);
+  }
+}
+
+function bindGitHubAdminEvents() {
+  bind('submit', async (e) => {
+    if (e.target.id === 'github-settings-form') {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      try {
+        await api('/api/github/settings', {
+          method: 'PUT',
+          body: {
+            base_url: fd.get('base_url'),
+            access_token: fd.get('access_token'),
+            service_account_username: fd.get('service_account_username') || null,
+          },
+        });
+        $('#github-settings-msg').textContent = '✅ Gespeichert';
+        setTimeout(() => { $('#github-settings-msg').textContent = ''; }, 2000);
+      } catch (err) {
+        $('#github-settings-msg').textContent = '❌ ' + err.message;
+      }
+    }
+  });
+
+  bind('#test-github-btn', async () => {
+    try {
+      const result = await api('/api/github/settings/test', { method: 'POST' });
+      $('#github-settings-msg').textContent = `✅ Verbunden als: ${result.user.name || result.user.username} (@${result.user.username})`;
+    } catch (err) {
+      $('#github-settings-msg').textContent = '❌ ' + err.message;
+    }
+  });
+}
+
+/* ===== PROJECT: Tracker Selection & Repo Picker ===== */
+async function loadProjectTracker(projectId) {
+  const block = $('#gitlab-block');
+  if (!block) return;
+  try {
+    const t = await api(`/api/projects/${projectId}/tracker`);
+    block.hidden = false;
+    state.currentTracker = t;
+    renderTrackerForm(t);
+  } catch (err) {
+    block.hidden = true;
+  }
+}
+
+function renderTrackerForm(tracker) {
+  const typeSelect = $('#tracker-type-select');
+  typeSelect.value = tracker.type || 'none';
+  updateTrackerFormVisibility(tracker.type || 'none');
+
+  if (tracker.type === 'gitlab') {
+    $('#gitlab-project-id-input').value = tracker.gitlab_project_id || '';
+  } else if (tracker.type === 'github') {
+    $('#github-repo-input').value = tracker.github_repo || '';
+  }
+
+  // Show/hide sync button + search button
+  const canEdit = state.currentProject && ['admin', 'projektmanager'].includes(state.currentProject.my_role);
+  $('#sync-tracker-btn').hidden = !tracker.configured;
+  $('#pick-tracker-project-btn').hidden = !tracker.type || tracker.type === 'none' || !canEdit;
+  $('#tracker-block-title').textContent = tracker.type === 'github' ? 'GitHub-Issues' : tracker.type === 'gitlab' ? 'GitLab-Issues' : 'Issue-Tracker';
+}
+
+function updateTrackerFormVisibility(type) {
+  $('#gitlab-id-label').hidden = type !== 'gitlab';
+  $('#github-repo-label').hidden = type !== 'github';
+  $('#sync-tracker-btn').hidden = type === 'none';
+  $('#pick-tracker-project-btn').hidden = type === 'none';
+}
+
+function bindTrackerEvents() {
+  bind('#tracker-type-select', 'change', (e) => {
+    updateTrackerFormVisibility(e.target.value);
+  });
+
+  bind('submit', async (e) => {
+    if (e.target.id === 'tracker-project-form') {
+      e.preventDefault();
+      if (!state.currentProject) return;
+      const fd = new FormData(e.target);
+      const type = fd.get('issue_tracker_type');
+      const body = { issue_tracker_type: type };
+      if (type === 'gitlab') {
+        const gid = fd.get('gitlab_project_id');
+        body.gitlab_project_id = gid ? Number(gid) : null;
+      } else if (type === 'github') {
+        body.github_repo = fd.get('github_repo') || null;
+      } else {
+        body.gitlab_project_id = null;
+        body.github_repo = null;
+      }
+      try {
+        await api(`/api/projects/${state.currentProject.id}`, { method: 'PUT', body });
+        await loadProject(state.currentProject.id);
+      } catch (err) { alert(err.message); }
+    }
+  });
+
+  bind('#sync-tracker-btn', async () => {
+    if (!state.currentProject) return;
+    try {
+      await api(`/api/projects/${state.currentProject.id}/tracker/sync`, { method: 'POST' });
+      await loadProject(state.currentProject.id);
+      alert('✅ Synchronisiert');
+    } catch (err) { alert(err.message); }
+  });
+
+  bind('#pick-tracker-project-btn', async () => {
+    if (!state.currentProject) return;
+    const type = $('#tracker-type-select').value;
+    if (type === 'none') return;
+    try {
+      const { projects, type: t } = await api(`/api/projects/${state.currentProject.id}/tracker/search?q=`);
+      renderTrackerSearchResults(projects, t);
+    } catch (err) { alert(err.message); }
+  });
+}
+
+function renderTrackerSearchResults(projects, type) {
+  const resultsDiv = $('#tracker-search-results');
+  const list = $('#tracker-search-list');
+  resultsDiv.hidden = false;
+  list.innerHTML = '';
+  if (!projects.length) {
+    list.innerHTML = '<li><small style="color:var(--text-muted);">Keine Ergebnisse.</small></li>';
+    return;
+  }
+  for (const p of projects) {
+    const li = document.createElement('li');
+    li.style.cssText = 'padding:0.5rem; cursor:pointer; border-bottom:1px solid var(--border);';
+    const displayName = type === 'github' ? p.full_name : (p.path_with_namespace || p.name);
+    const id = type === 'github' ? p.full_name : p.id;
+    li.innerHTML = `<strong>${escapeHtml(displayName)}</strong>${p.description ? `<br><small style="color:var(--text-muted);">${escapeHtml(p.description.slice(0, 80))}</small>` : ''}`;
+    li.onclick = () => {
+      if (type === 'github') {
+        $('#github-repo-input').value = id;
+      } else {
+        $('#gitlab-project-id-input').value = id;
+      }
+      resultsDiv.hidden = true;
+    };
+    list.appendChild(li);
+  }
+}
+
+/* ===== HOOK INTO loadProject ===== */
+const _origLoadProjectTracker = loadProject;
+loadProject = async function(id) {
+  await _origLoadProjectTracker(id);
+  await loadProjectTracker(id);
+};
+
+/* ===== HOOK INTO loadAdmin ===== */
+const _origLoadAdminGh = typeof loadAdmin !== 'undefined' ? loadAdmin : null;
+if (_origLoadAdminGh) {
+  window.loadAdmin = async function() {
+    await _origLoadAdminGh();
+    await loadGitHubSettings();
+  };
+}
+
+/* ===== INIT ===== */
+bindGitHubAdminEvents();
+bindTrackerEvents();
