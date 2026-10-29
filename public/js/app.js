@@ -2056,3 +2056,148 @@ loadProject = async function(id) {
 /* ===== INIT CUSTOM FIELD EVENTS ===== */
 bindCustomFieldAdminEvents();
 bindProjectCustomFieldsEvents();
+
+/* ===== ISSUE #74: TASK RELATIONS (Parent/Child/Related) ===== */
+
+function renderTaskRelations(data) {
+  const block = $('#td-relations-block');
+  if (!block) return;
+  block.hidden = false;
+
+  const { parent, children, related, childrenProgress } = data;
+
+  // Parent
+  const parentDisplay = $('#td-parent-display');
+  const parentLink = $('#td-parent-link');
+  if (parent) {
+    parentDisplay.hidden = false;
+    parentLink.textContent = `#${parent.id} ${parent.title}`;
+    parentLink.onclick = () => {
+      if (state.currentProject) loadTaskDetail(state.currentProject.id, parent.id);
+    };
+  } else {
+    parentDisplay.hidden = true;
+  }
+
+  // Children
+  const childrenDisplay = $('#td-children-display');
+  const childrenList = $('#td-children-list');
+  if (children && children.length > 0) {
+    childrenDisplay.hidden = false;
+    childrenList.innerHTML = '';
+    for (const c of children) {
+      const li = document.createElement('li');
+      li.style.cssText = 'display:flex; align-items:center; gap:0.5rem; padding:0.25rem 0;';
+      const statusBadge = `<span class="badge ${badgeClass(c.status)}">${c.status}</span>`;
+      const removeBtn = `<button class="btn-small btn-secondary" onclick="removeRelation(${c.id}, 'parent_child', 'child')" title="Verknüpfung entfernen">✕</button>`;
+      li.innerHTML = `<span style="cursor:pointer; color:var(--accent); flex:1;" onclick="loadTaskDetail(state.currentProject.id, ${c.id})">#${c.id} ${escapeHtml(c.title)}</span> ${statusBadge} ${removeBtn}`;
+      childrenList.appendChild(li);
+    }
+    // Progress
+    const progressDiv = $('#td-children-progress');
+    if (childrenProgress && childrenProgress.total > 0) {
+      progressDiv.hidden = false;
+      $('#td-children-progress-text').textContent = `${childrenProgress.done}/${childrenProgress.total} erledigt`;
+      $('#td-children-progress-bar').style.width = `${childrenProgress.percent}%`;
+    } else {
+      progressDiv.hidden = true;
+    }
+  } else {
+    childrenDisplay.hidden = true;
+  }
+
+  // Related
+  const relatedDisplay = $('#td-related-display');
+  const relatedList = $('#td-related-list');
+  if (related && related.length > 0) {
+    relatedDisplay.hidden = false;
+    relatedList.innerHTML = '';
+    for (const r of related) {
+      const li = document.createElement('li');
+      li.style.cssText = 'display:flex; align-items:center; gap:0.5rem; padding:0.25rem 0;';
+      const arrow = r.direction === 'parent' ? '←' : '→';
+      const removeBtn = `<button class="btn-small btn-secondary" onclick="removeRelation(${r.id}, 'relates_to', '${r.direction}')" title="Verknüpfung entfernen">✕</button>`;
+      li.innerHTML = `<span style="cursor:pointer; color:var(--accent); flex:1;" onclick="loadTaskDetail(state.currentProject.id, ${r.id})">${arrow} #${r.id} ${escapeHtml(r.title)}</span> ${removeBtn}`;
+      relatedList.appendChild(li);
+    }
+  } else {
+    relatedDisplay.hidden = true;
+  }
+}
+
+function bindRelationEvents() {
+  bind('#td-relation-toggle-btn', () => {
+    const form = $('#td-relation-form');
+    form.hidden = !form.hidden;
+    if (!form.hidden && state.currentTask && state.currentProject) {
+      loadRelationCandidates();
+    }
+  });
+
+  bind('#td-relation-cancel-btn', () => {
+    $('#td-relation-form').hidden = true;
+  });
+
+  bind('#td-relation-type', 'change', (e) => {
+    // Show/hide direction for relates_to
+    const isParentChild = e.target.value === 'parent_child';
+    $('#td-relation-direction').disabled = !isParentChild;
+  });
+
+  bind('#td-relation-add-btn', async () => {
+    if (!state.currentTask || !state.currentProject) return;
+    const targetId = Number($('#td-relation-target').value);
+    const relType = $('#td-relation-type').value;
+    const direction = $('#td-relation-direction').value;
+    if (!targetId) { alert('Bitte einen Task auswählen'); return; }
+    try {
+      await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}/relations`, {
+        method: 'POST',
+        body: { target_task_id: targetId, relation_type: relType, direction },
+      });
+      $('#td-relation-form').hidden = true;
+      await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
+      await loadProject(state.currentProject.id);
+    } catch (err) { alert(err.message); }
+  });
+}
+
+async function loadRelationCandidates() {
+  if (!state.currentTask || !state.currentProject) return;
+  try {
+    const { tasks } = await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}/relation-candidates`);
+    const select = $('#td-relation-target');
+    select.innerHTML = '<option value="">-- Task wählen --</option>';
+    for (const t of tasks) {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = `#${t.id} ${t.title} (${t.status})`;
+      select.appendChild(opt);
+    }
+  } catch (err) {
+    console.error('Candidates laden fehlgeschlagen:', err.message);
+  }
+}
+
+/* Global function for remove relation */
+window.removeRelation = async function(targetTaskId, relType, direction) {
+  if (!confirm('Verknüpfung wirklich entfernen?')) return;
+  if (!state.currentTask || !state.currentProject) return;
+  try {
+    await api(`/api/projects/${state.currentProject.id}/tasks/${state.currentTask.task.id}/relations/${targetTaskId}?type=${relType}&direction=${direction}`, { method: 'DELETE' });
+    await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
+    await loadProject(state.currentProject.id);
+  } catch (err) { alert(err.message); }
+};
+
+/* Hook into renderTaskDetail */
+const _origRenderTaskDetail2 = renderTaskDetail;
+renderTaskDetail = function(data) {
+  _origRenderTaskDetail2(data);
+  if (data.parent !== undefined || data.children !== undefined) {
+    renderTaskRelations(data);
+  }
+};
+
+/* Init relation events */
+bindRelationEvents();

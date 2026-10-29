@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const taskMarkdown = require('./taskMarkdown');
+const taskRelations = require('./taskRelations');
 const { version } = require('../../package.json');
 
 async function getSettings() {
@@ -283,6 +284,41 @@ async function syncProjectMilestones(projectId, gitlabProjectId) {
   return rows;
 }
 
+/**
+ * #74: Erstellt einen GitLab-Issue-Link zwischen zwei Issues.
+ * GitLab API: POST /projects/:id/issues/:issue_iid/links
+ * @param {string|number} gitlabProjectId - GitLab-Projekt-ID
+ * @param {number} sourceIid - Quell-Issue IID
+ * @param {number} targetIid - Ziel-Issue IID
+ * @param {string} linkType - 'relates_to' | 'blocks' | 'is_blocked_by'
+ */
+async function createIssueLink(gitlabProjectId, sourceIid, targetIid, linkType = 'relates_to') {
+  return gitlabRequest(
+    `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${sourceIid}/links`,
+    { method: 'POST', body: { target_project_id: gitlabProjectId, target_issue_iid: targetIid, link_type: linkType } }
+  );
+}
+
+/**
+ * #74: Löscht einen GitLab-Issue-Link.
+ */
+async function deleteIssueLink(gitlabProjectId, sourceIid, linkId) {
+  await gitlabRequest(
+    `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${sourceIid}/links/${linkId}`,
+    { method: 'DELETE' }
+  );
+  return true;
+}
+
+/**
+ * #74: Holt alle Links eines GitLab-Issues.
+ */
+async function getIssueLinks(gitlabProjectId, iid) {
+  return gitlabRequest(
+    `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}/links?per_page=100`
+  );
+}
+
 module.exports = {
   getSettings,
   saveSettings,
@@ -299,4 +335,7 @@ module.exports = {
   listGitLabMilestones,
   listGitLabLabels,
   listGitLabUsers,
+  createIssueLink,
+  deleteIssueLink,
+  getIssueLinks,
 };

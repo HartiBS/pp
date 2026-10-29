@@ -10,6 +10,7 @@ const taskComments = require('../utils/taskComments');
 const taskSubtasks = require('../utils/taskSubtasks');
 const customFields = require('../utils/customFields');
 const taskMarkdown = require('../utils/taskMarkdown');
+const taskRelations = require('../utils/taskRelations');
 
 const router = express.Router();
 
@@ -330,8 +331,14 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
           estimated_hours !== undefined || spent_hours !== undefined || custom_fields !== undefined) {
         const activeCfDefs = await customFields.getProjectFieldDefinitions(req.params.id);
         const subtasks = await taskSubtasks.getSubtasks(updatedTask.id);
+        // #74: Parent/Child/Related in Markdown einbetten
+        const [parent, children, related] = await Promise.all([
+          taskRelations.getParent(updatedTask.id),
+          taskRelations.getChildren(updatedTask.id),
+          taskRelations.getRelatedTasks(updatedTask.id),
+        ]);
         gitlabUpdate.description = taskMarkdown.taskToMarkdown(updatedTask, {
-          customFieldDefs: activeCfDefs, subtasks,
+          customFieldDefs: activeCfDefs, subtasks, parent, children, related,
         });
       }
       if (status && status !== oldStatus) {
@@ -639,6 +646,122 @@ router.delete('/:id/tasks/:taskId/watch', loadProjectRole, requireProjectPermiss
   }
 });
 
+// ===== Issue #74: Task-Relationen (Parent/Child/Related) =====
+
+// GET: Alle Relationen eines Tasks
+router.get('/:id/tasks/:taskId/relations', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const [relations, parent, children, related, childrenProgress] = await Promise.all([
+      taskRelations.getTaskRelations(req.params.taskId),
+      taskRelations.getParent(req.params.taskId),
+      taskRelations.getChildren(req.params.taskId),
+      taskRelations.getRelatedTasks(req.params.taskId),
+      taskRelations.getChildrenProgress(req.params.taskId),
+    ]);
+    res.json({ relations, parent, children, related, childrenProgress });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// POST: Relation erstellen (Parent oder Related)
+router.post('/:id/tasks/:taskId/relations', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
+  const { target_task_id, relation_type, direction } = req.body;
+  if (!target_task_id) {
+    return res.status(400).json({ error: 'target_task_id ist erforderlich' });
+  }
+  const relType = relation_type || 'parent_child';
+  // direction: 'parent' = target is parent of this task, 'child' = target is child of this task
+  const isParent = direction === 'parent';
+  const parentId = isParent ? Number(target_task_id) : Number(req.params.taskId);
+  const childId = isParent ? Number(req.params.taskId) : Number(target_task_id);
+
+  try {
+    const relation = await taskRelations.createRelation(parentId, childId, relType);
+    if (!relation) {
+      return res.status(409).json({ error: 'Relation existiert bereits' });
+    }
+
+    // #74: GitLab-Issue-Link erstellen (best effort)
+    try {
+      const tasks = await db.query(
+        'SELECT gitlab_iid FROM tasks WHERE id IN ($1, $2) AND project_id = $3',
+        [parentId, childId, req.params.id]
+      );
+      const projectGitlab = await db.query(
+        'SELECT gitlab_project_id FROM projects WHERE id = $1',
+        [req.params.id]
+      );
+      const gitlabProjectId = projectGitlab.rows[0]?.gitlab_project_id;
+      const parentIid = tasks.rows.find(r => true)?.gitlab_iid; // vereinfacht
+      // Beide Tasks müssen gitlab_iid haben
+      const { rows: bothTasks } = await db.query(
+        'SELECT id, gitlab_iid FROM tasks WHERE id IN ($1, $2)',
+        [parentId, childId]
+      );
+      const pTask = bothTasks.find(t => Number(t.id) === parentId);
+      const cTask = bothTasks.find(t => Number(t.id) === childId);
+      if (gitlabProjectId && pTask?.gitlab_iid && cTask?.gitlab_iid) {
+        if (relType === 'parent_child') {
+          await gitlab.createIssueLink(gitlabProjectId, cTask.gitlab_iid, pTask.gitlab_iid, 'relates_to');
+        } else {
+          await gitlab.createIssueLink(gitlabProjectId, req.params.taskId, Number(target_task_id), 'relates_to');
+        }
+      }
+    } catch (gitlabErr) {
+      console.error('GitLab-Link fehlgeschlagen:', gitlabErr.message);
+    }
+
+    // Historie
+    await taskHistory.logTaskChange(req.params.taskId, req.session.userId, 'updated', 'relation_added', null, `Task #${target_task_id} (${relType})`);
+
+    res.status(201).json({ relation });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message || 'Serverfehler' });
+  }
+});
+
+// DELETE: Relation entfernen
+router.delete('/:id/tasks/:taskId/relations/:targetTaskId', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
+  const relationType = req.query.type || 'parent_child';
+  const direction = req.query.direction || 'child'; // 'child' = target is child of this task
+  const isParent = direction === 'parent';
+  const parentId = isParent ? Number(req.params.targetTaskId) : Number(req.params.taskId);
+  const childId = isParent ? Number(req.params.taskId) : Number(req.params.targetTaskId);
+
+  try {
+    const deleted = await taskRelations.deleteRelation(parentId, childId, relationType);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Relation nicht gefunden' });
+    }
+    await taskHistory.logTaskChange(req.params.taskId, req.session.userId, 'updated', 'relation_removed', `Task #${req.params.targetTaskId}`, null);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// GET: Verfügbare Tasks für Relation-Auswahl (im selben Projekt, außer sich selbst)
+router.get('/:id/tasks/:taskId/relation-candidates', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT id, title, status, issue_type, gitlab_iid
+       FROM tasks
+       WHERE project_id = $1 AND id != $2
+       ORDER BY created_at DESC
+       LIMIT 100`,
+      [req.params.id, req.params.taskId]
+    );
+    res.json({ tasks: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
 // US-28: Task-Detail (alle Infos auf einmal)
 router.get('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
   try {
@@ -663,6 +786,13 @@ router.get('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('view
     ]);
     const watching = await taskWatchers.isWatching(req.params.taskId, req.session.userId);
     const customFieldDefs = await customFields.getProjectFieldDefinitions(req.params.id);
+    // #74: Relationen laden
+    const [parent, children, related, childrenProgress] = await Promise.all([
+      taskRelations.getParent(req.params.taskId),
+      taskRelations.getChildren(req.params.taskId),
+      taskRelations.getRelatedTasks(req.params.taskId),
+      taskRelations.getChildrenProgress(req.params.taskId),
+    ]);
     res.json({
       task: { ...task, subtask_count: progress.total, subtask_done: progress.done },
       comments,
@@ -671,6 +801,10 @@ router.get('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('view
       watchers,
       watching,
       customFieldDefs,
+      parent,
+      children,
+      related,
+      childrenProgress,
     });
   } catch (err) {
     console.error(err);

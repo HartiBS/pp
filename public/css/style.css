@@ -989,3 +989,51 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   font-size: 0.875rem;
   color: var(--text-muted);
 }
+
+/* ===== Issue #74: Task Relations ===== */
+
+#td-relations-block {
+  font-size: 0.875rem;
+}
+
+#td-relations-block h4 {
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+#td-parent-link:hover,
+#td-children-list span:hover,
+#td-related-list span:hover {
+  text-decoration: underline;
+}
+
+#td-children-list li,
+#td-related-list li {
+  border-bottom: 1px solid var(--border);
+}
+
+#td-children-list li:last-child,
+#td-related-list li:last-child {
+  border-bottom: none;
+}
+
+#td-relation-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+#td-relation-form select {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+#td-children-progress-bar {
+  transition: width 0.3s ease;
+}

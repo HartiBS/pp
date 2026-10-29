@@ -456,6 +456,47 @@
       </div>
 
       <div id="td-tab-info" class="td-tab-content">
+        <div id="td-relations-block" hidden style="margin-bottom:1rem; padding:0.75rem; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
+          <h4 style="margin-bottom:0.5rem;">🔗 Verknüpfte Tasks</h4>
+          <div id="td-parent-display" hidden style="margin-bottom:0.5rem;">
+            <small style="color:var(--text-muted);">⬆ Parent:</small>
+            <span id="td-parent-link" style="cursor:pointer; color:var(--accent);"></span>
+          </div>
+          <div id="td-children-display" hidden style="margin-bottom:0.5rem;">
+            <small style="color:var(--text-muted);">⬇ Children:</small>
+            <ul id="td-children-list" class="dash-list" style="margin-top:0.25rem;"></ul>
+            <div id="td-children-progress" hidden style="margin-top:0.35rem;">
+              <small>Fortschritt: <span id="td-children-progress-text">0/0</span></small>
+              <div style="background:var(--border); border-radius:4px; height:6px; margin-top:0.15rem;">
+                <div id="td-children-progress-bar" style="background:var(--accent); height:6px; border-radius:4px; width:0%;"></div>
+              </div>
+            </div>
+          </div>
+          <div id="td-related-display" hidden style="margin-bottom:0.5rem;">
+            <small style="color:var(--text-muted);">🔗 Verknüpft:</small>
+            <ul id="td-related-list" class="dash-list" style="margin-top:0.25rem;"></ul>
+          </div>
+          <div id="td-relation-form" hidden style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:flex-end; margin-top:0.5rem;">
+            <label>Task
+              <select id="td-relation-target" style="min-width:200px;"></select>
+            </label>
+            <label>Typ
+              <select id="td-relation-type">
+                <option value="parent_child">Parent/Child</option>
+                <option value="relates_to">Verknüpft (relates to)</option>
+              </select>
+            </label>
+            <label>Richtung
+              <select id="td-relation-direction">
+                <option value="child">Als Child hinzufügen</option>
+                <option value="parent">Als Parent setzen</option>
+              </select>
+            </label>
+            <button type="button" id="td-relation-add-btn">+ Verknüpfen</button>
+            <button type="button" id="td-relation-cancel-btn" class="btn-secondary">Abbrechen</button>
+          </div>
+          <button type="button" id="td-relation-toggle-btn" class="btn-small btn-secondary" style="margin-top:0.5rem;">+ Verknüpfung hinzufügen</button>
+        </div>
         <form id="td-edit-form">
           <label>Titel <input type="text" name="title" id="td-edit-title" required></label>
           <label>Beschreibung <textarea name="description" id="td-edit-description"></textarea></label>

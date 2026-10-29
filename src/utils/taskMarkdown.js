@@ -40,7 +40,7 @@ const TYPE_LABELS = {
  * @param {Array}  opts.subtasks - Subtasks des Tasks
  * @returns {string} Markdown-String
  */
-function taskToMarkdown(task, { customFieldDefs = [], subtasks = [] } = {}) {
+function taskToMarkdown(task, { customFieldDefs = [], subtasks = [], parent = null, children = [], related = [] } = {}) {
   const meta = {
     pp: true,
     status: task.status,
@@ -52,6 +52,17 @@ function taskToMarkdown(task, { customFieldDefs = [], subtasks = [] } = {}) {
     spent_hours: task.spent_hours != null ? Number(task.spent_hours) : null,
     custom_fields: task.custom_fields || {},
   };
+
+  // #74: Parent/Child-Relationen in Meta-Block aufnehmen
+  if (parent) {
+    meta.parent = { id: parent.id, title: parent.title, gitlab_iid: parent.gitlab_iid || null };
+  }
+  if (children && children.length > 0) {
+    meta.children = children.map(c => ({ id: c.id, title: c.title, gitlab_iid: c.gitlab_iid || null }));
+  }
+  if (related && related.length > 0) {
+    meta.related = related.map(r => ({ id: r.id, title: r.title, gitlab_iid: r.gitlab_iid || null, direction: r.direction }));
+  }
 
   const lines = [];
 
@@ -119,6 +130,29 @@ function taskToMarkdown(task, { customFieldDefs = [], subtasks = [] } = {}) {
     const doneCount = subtasks.filter(s => s.is_done).length;
     lines.push('');
     lines.push(`*Fortschritt: ${doneCount}/${subtasks.length} erledigt*`);
+    lines.push('');
+  }
+
+  // #74: Verknüpfte Tasks (Parent/Children/Related)
+  if (parent || (children && children.length > 0) || (related && related.length > 0)) {
+    lines.push('## Verknüpfte Tasks');
+    lines.push('');
+    if (parent) {
+      lines.push(`- **⬆ Parent:** ${escapeMd(parent.title)}`);
+    }
+    if (children && children.length > 0) {
+      lines.push(`- **⬇ Children (${children.length}):**`);
+      for (const c of children) {
+        lines.push(`  - ${escapeMd(c.title)}`);
+      }
+    }
+    if (related && related.length > 0) {
+      lines.push(`- **🔗 Verknüpft (${related.length}):**`);
+      for (const r of related) {
+        const arrow = r.direction === 'parent' ? '←' : '→';
+        lines.push(`  - ${arrow} ${escapeMd(r.title)}`);
+      }
+    }
     lines.push('');
   }
 
