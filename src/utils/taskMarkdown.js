@@ -166,10 +166,15 @@ function markdownToTaskFields(markdown) {
 }
 
 /**
- * Hilfsfunktion: Maskiert Pipe-Zeichen in Markdown-Tabellen.
+ * Hilfsfunktion: Maskiert Sonderzeichen für Markdown-Tabellen.
+ * Entschärft zuerst Backslashes (sonst doppeltes Escaping), dann Pipes
+ * und ersetzt Zeilenumbrüche durch Leerzeichen.
  */
 function escapeMd(str) {
-  return String(str).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  return String(str)
+    .replace(/\\/g, '\\\\')   // Backslash zuerst escapen
+    .replace(/\|/g, '\\|')     // Pipe escapen
+    .replace(/\r?\n/g, ' ');   // Zeilenumbrüche entfernen
 }
 
 module.exports = {
