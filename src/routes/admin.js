@@ -297,7 +297,7 @@ router.get('/projects', async (req, res) => {
 });
 
 router.put('/projects/:id', async (req, res) => {
-  const { name, description, status, owner_id } = req.body;
+  const { name, description, status, owner_id, issue_tracker_type, gitlab_project_id, github_repo } = req.body;
   try {
     // Validate status
     if (status !== undefined && !['active', 'paused', 'done', 'archived'].includes(status)) {
@@ -310,16 +310,23 @@ router.put('/projects/:id', async (req, res) => {
         return res.status(400).json({ error: 'Owner nicht gefunden oder deaktiviert' });
       }
     }
+    // #91/#96: Tracker-Typ validieren
+    if (issue_tracker_type !== undefined && !['none', 'gitlab', 'github'].includes(issue_tracker_type)) {
+      return res.status(400).json({ error: 'Ungültiger Tracker-Typ' });
+    }
     const { rows } = await db.query(
       `UPDATE projects
        SET name = COALESCE($1, name),
            description = COALESCE($2, description),
            status = COALESCE($3, status),
            owner_id = COALESCE($4, owner_id),
+           issue_tracker_type = COALESCE($5, issue_tracker_type),
+           gitlab_project_id = COALESCE($6, gitlab_project_id),
+           github_repo = COALESCE($7, github_repo),
            updated_at = NOW()
-       WHERE id = $5
+       WHERE id = $8
        RETURNING *`,
-      [name, description, status, owner_id, req.params.id]
+      [name, description, status, owner_id, issue_tracker_type, gitlab_project_id, github_repo, req.params.id]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Projekt nicht gefunden' });

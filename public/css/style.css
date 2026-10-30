@@ -1235,3 +1235,43 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 #admin-tab-projects {
   min-height: 200px;
 }
+
+/* ===== #96: Tracker-Verbindung in Admin "Projekt bearbeiten" ===== */
+#admin-project-connection-block label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+#admin-project-connection-block input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+#admin-project-form select,
+#admin-project-form input[type="text"],
+#admin-project-form input[type="number"],
+#admin-project-form input[type="url"],
+#admin-project-form textarea {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+#admin-project-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}

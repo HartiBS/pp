@@ -156,20 +156,6 @@
         <tbody></tbody>
       </table>
 
-      <h2 style="margin-top:2rem;">GitLab-Verbindung</h2>
-      <form id="gitlab-settings-form">
-        <label>GitLab-URL <input type="url" name="base_url" placeholder="https://gitlab.example.com" required></label>
-        <label>Service-Account Access Token <input type="password" name="access_token" required></label>
-        <label>Service-Account Benutzername (optional, für Impersonation)
-          <input type="text" name="service_account_username" id="gitlab-sa-username" placeholder="z. B. pp-serviceaccount">
-        </label>
-        <div style="display:flex; gap:0.75rem;">
-          <button type="submit">Speichern</button>
-          <button type="button" id="test-gitlab-btn" class="btn-secondary">Verbindung testen</button>
-        </div>
-      </form>
-      <p id="gitlab-settings-msg"></p>
-
       <h2 style="margin-top:2rem;">Custom Fields (Zusatzfelder)</h2>
       <p style="color:var(--text-muted); font-size:0.875rem;">Definiere globale Zusatzfelder, die Projektmanager pro Projekt aktivieren können.</p>
       <form id="custom-field-form">
@@ -203,20 +189,6 @@
         <tbody></tbody>
       </table>
 
-      <h2 style="margin-top:2rem;">GitHub-Verbindung</h2>
-      <form id="github-settings-form">
-        <label>GitHub API-URL <input type="url" name="base_url" placeholder="https://api.github.com" required></label>
-        <label>Access Token <input type="password" name="access_token" required></label>
-        <label>Service-Account Benutzername (optional)
-          <input type="text" name="service_account_username" placeholder="z. B. pp-bot">
-        </label>
-        <div style="display:flex; gap:0.75rem;">
-          <button type="submit">Speichern</button>
-          <button type="button" id="test-github-btn" class="btn-secondary">Verbindung testen</button>
-        </div>
-      </form>
-      <p id="github-settings-msg"></p>
-
       </div><!-- /admin-tab-users -->
       <div id="admin-tab-projects" hidden>
       <h2>Projektverwaltung</h2>
@@ -242,6 +214,31 @@
             </select>
           </label>
           <label>Owner <select name="owner_id" id="admin-project-owner-select" required></select></label>
+        </div>
+        <h3 style="margin-top:1.5rem;">Issue-Tracker Verbindung</h3>
+        <p style="color:var(--text-muted); font-size:0.875rem;">Wähle GitHub oder GitLab und hinterlege die Verbindungsdaten für dieses Projekt.</p>
+        <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+          <label>Tracker
+            <select name="issue_tracker_type" id="admin-project-tracker-type">
+              <option value="none">Keiner</option>
+              <option value="gitlab">GitLab</option>
+              <option value="github">GitHub</option>
+            </select>
+          </label>
+          <label id="admin-project-gitlab-id-label" hidden>GitLab-Projekt-ID
+            <input type="number" name="gitlab_project_id" id="admin-project-gitlab-id" placeholder="z. B. 42" style="width:120px;">
+          </label>
+          <label id="admin-project-github-repo-label" hidden>GitHub-Repo
+            <input type="text" name="github_repo" id="admin-project-github-repo" placeholder="owner/repo" style="width:180px;">
+          </label>
+        </div>
+        <div id="admin-project-connection-block" hidden style="margin-top:0.75rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:6px;">
+          <h4 style="margin-bottom:0.5rem;">Verbindungsdaten (überschreiben global)</h4>
+          <label>API-URL <input type="url" name="conn_base_url" id="admin-project-conn-base-url" placeholder="https://..."></label>
+          <label>Access Token <input type="password" name="conn_access_token" id="admin-project-conn-access-token" placeholder="(leer lassen = global verwenden)"></label>
+          <label>Service-Account (optional) <input type="text" name="conn_service_account" id="admin-project-conn-sa"></label>
+          <button type="button" id="admin-project-test-conn-btn" class="btn-secondary btn-small">Verbindung testen</button>
+          <p id="admin-project-conn-msg" style="font-size:0.8rem; margin-top:0.35rem; min-height:1.2em;"></p>
         </div>
         <div style="display:flex; gap:0.75rem; margin-top:0.5rem;">
           <button type="submit">Speichern</button>
@@ -747,6 +744,6 @@
     </section>
   </main>
 
-  <script src="/js/app.js?v=8"></script>
+  <script src="/js/app.js?v=9"></script>
 </body>
 </html>

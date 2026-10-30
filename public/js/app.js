@@ -734,16 +734,22 @@ async function loadGitLabIssues(projectId) {
 }
 
 async function loadGitLabSettings() {
+  // #96: Formular wurde aus der Benutzerverwaltung entfernt – nur noch Sync-Seite
+  const form = $('#gitlab-settings-form');
+  if (!form) return;
   try {
     const s = await api('/api/gitlab/settings');
-    $('#gitlab-settings-form').base_url.value = s.base_url || '';
-    $('#gitlab-settings-form').access_token.value = '';
-    $('#gitlab-sa-username').value = s.service_account_username || '';
-    $('#gitlab-settings-msg').textContent = s.configured
+    form.base_url.value = s.base_url || '';
+    form.access_token.value = '';
+    const sa = $('#gitlab-sa-username');
+    if (sa) sa.value = s.service_account_username || '';
+    const msg = $('#gitlab-settings-msg');
+    if (msg) msg.textContent = s.configured
       ? `Konfiguriert: ${s.base_url} (Token gesetzt${s.service_account_username ? ', Service-Account: @' + s.service_account_username : ''})`
       : 'Noch nicht konfiguriert.';
   } catch (err) {
-    $('#gitlab-settings-msg').textContent = err.message;
+    const msg = $('#gitlab-settings-msg');
+    if (msg) msg.textContent = err.message;
   }
 }
 
@@ -1208,6 +1214,7 @@ for (const status of ['todo', 'in_progress', 'review', 'done']) {
 }
 
 bind('#test-gitlab-btn', async () => {
+  if (!$('#gitlab-settings-form')) return; // #96: Formular entfernt
   const msg = $('#gitlab-settings-msg');
   msg.textContent = 'Teste Verbindung...';
   try {
@@ -2329,15 +2336,16 @@ bindRelationEvents();
 
 /* ===== ADMIN: GitHub Settings ===== */
 async function loadGitHubSettings() {
+  // #96: Formular wurde aus der Benutzerverwaltung entfernt – nur noch Sync-Seite
+  const form = $('#github-settings-form');
+  if (!form) return;
   try {
     const s = await api('/api/github/settings');
-    if (s.configured) {
-      $('#github-settings-form').base_url.value = s.base_url || '';
-      $('#github-settings-form').access_token.value = '';
-      $('#github-settings-form').service_account_username.value = s.service_account_username || '';
-    }
+    form.base_url.value = s.base_url || '';
+    form.access_token.value = '';
+    form.service_account_username.value = s.service_account_username || '';
   } catch (err) {
-    console.error('GitHub-Settings laden fehlgeschlagen:', err.message);
+    console.error('GitHub-Settings konnten nicht geladen werden:', err.message);
   }
 }
 
@@ -2364,6 +2372,7 @@ function bindGitHubAdminEvents() {
   });
 
   bind('#test-github-btn', async () => {
+    if (!$('#github-settings-form')) return; // #96: Formular entfernt
     try {
       const result = await api('/api/github/settings/test', { method: 'POST' });
       $('#github-settings-msg').textContent = `✅ Verbunden als: ${result.user.name || result.user.username} (@${result.user.username})`;
@@ -2565,6 +2574,27 @@ async function editAdminProject(project) {
   form.elements['description'].value = project.description || '';
   form.elements['status'].value = project.status || 'active';
 
+  // #96: Tracker-Felder befüllen
+  const trackerTypeSelect = $('#admin-project-tracker-type');
+  if (trackerTypeSelect) {
+    trackerTypeSelect.value = project.issue_tracker_type || 'none';
+    updateAdminProjectTrackerVisibility(project.issue_tracker_type || 'none');
+  }
+  const glIdInput = $('#admin-project-gitlab-id');
+  if (glIdInput) glIdInput.value = project.gitlab_project_id || '';
+  const ghRepoInput = $('#admin-project-github-repo');
+  if (ghRepoInput) ghRepoInput.value = project.github_repo || '';
+  // Project-spezifische Verbindungsdaten laden
+  loadAdminProjectConnectionSettings(project.id);
+
+  // #91/#96: Tracker-Typ-Wechsel-Handler
+  if (trackerTypeSelect && !trackerTypeSelect.dataset.bound) {
+    trackerTypeSelect.dataset.bound = '1';
+    trackerTypeSelect.addEventListener('change', (e) => {
+      updateAdminProjectTrackerVisibility(e.target.value);
+    });
+  }
+
   // Owner-Dropdown laden
   const ownerSelect = $('#admin-project-owner-select');
   ownerSelect.innerHTML = '<option value="">Laden...</option>';
@@ -2599,14 +2629,39 @@ function bindAdminProjectEvents() {
       e.preventDefault();
       const fd = new FormData(e.target);
       const id = fd.get('id');
+      const trackerType = fd.get('issue_tracker_type') || 'none';
       const body = {
         name: fd.get('name'),
         description: fd.get('description') || null,
         status: fd.get('status'),
         owner_id: Number(fd.get('owner_id')),
+        // #91/#96: Tracker-Typ + Ziel mit an Admin-Update senden
+        issue_tracker_type: trackerType,
       };
+      if (trackerType === 'gitlab') {
+        const gid = fd.get('gitlab_project_id');
+        body.gitlab_project_id = gid ? Number(gid) : null;
+      } else if (trackerType === 'github') {
+        body.github_repo = fd.get('github_repo') || null;
+      } else {
+        body.gitlab_project_id = null;
+        body.github_repo = null;
+      }
       try {
         await api(`/api/admin/projects/${id}`, { method: 'PUT', body });
+        // #96: Verbindungsdaten separat speichern (falls eingegeben)
+        const connToken = fd.get('conn_access_token');
+        const connBaseUrl = fd.get('conn_base_url');
+        if (trackerType !== 'none' && connToken && connBaseUrl) {
+          await api(`/api/projects/${id}/tracker/settings`, {
+            method: 'PUT',
+            body: {
+              base_url: connBaseUrl,
+              access_token: connToken,
+              service_account_username: fd.get('conn_service_account') || null,
+            },
+          });
+        }
         $('#admin-project-form').hidden = true;
         await loadAdminProjects();
       } catch (err) { alert(err.message); }
@@ -2943,3 +2998,56 @@ function bindSyncViewEvents() {
 }
 
 bindSyncViewEvents();
+
+
+/* ============================================================
+ * #91 (reopened) + #96: Tracker-Verbindung in "Projekt bearbeiten" (Admin-Tab)
+ * ============================================================ */
+
+function updateAdminProjectTrackerVisibility(type) {
+  const glLabel = $('#admin-project-gitlab-id-label');
+  const ghLabel = $('#admin-project-github-repo-label');
+  const connBlock = $('#admin-project-connection-block');
+  if (glLabel) glLabel.hidden = type !== 'gitlab';
+  if (ghLabel) ghLabel.hidden = type !== 'github';
+  if (connBlock) connBlock.hidden = type === 'none';
+}
+
+async function loadAdminProjectConnectionSettings(projectId) {
+  const msgEl = $('#admin-project-conn-msg');
+  const baseUrlInput = $('#admin-project-conn-base-url');
+  const saInput = $('#admin-project-conn-sa');
+  try {
+    const s = await api(`/api/projects/${projectId}/tracker/settings`);
+    if (s.has_project_settings) {
+      if (baseUrlInput) baseUrlInput.value = s.base_url || '';
+      if (saInput) saInput.value = s.service_account_username || '';
+      if (msgEl) { msgEl.textContent = 'Projekt-spezifische Verbindung aktiv.'; msgEl.style.color = 'var(--success, #4caf50)'; }
+    } else {
+      if (baseUrlInput) baseUrlInput.value = '';
+      if (saInput) saInput.value = '';
+      if (msgEl) { msgEl.textContent = 'Globale Verbindung wird verwendet.'; msgEl.style.color = 'var(--text-muted)'; }
+    }
+    const tokenInput = $('#admin-project-conn-access-token');
+    if (tokenInput) tokenInput.value = '';
+  } catch (e) {
+    if (msgEl) { msgEl.textContent = ''; msgEl.style.color = ''; }
+  }
+}
+
+// Test-Button für die projekt-spezifische Verbindung im Admin-Tab
+bind('#admin-project-test-conn-btn', async () => {
+  const form = $('#admin-project-form');
+  if (!form || form.elements['id'].value === '') return;
+  const projectId = form.elements['id'].value;
+  const trackerType = form.elements['issue_tracker_type'].value;
+  const msgEl = $('#admin-project-conn-msg');
+  if (msgEl) { msgEl.textContent = 'Teste...'; msgEl.style.color = 'var(--text-muted)'; }
+  try {
+    const endpoint = trackerType === 'gitlab' ? '/api/sync/test/gitlab' : '/api/sync/test/github';
+    const r = await api(endpoint, { method: 'POST' });
+    if (msgEl) { msgEl.textContent = '✅ OK: @' + (r.user.username || r.user.login); msgEl.style.color = 'var(--success, #4caf50)'; }
+  } catch (err) {
+    if (msgEl) { msgEl.textContent = '❌ ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
+  }
+});
