@@ -1123,27 +1123,44 @@ router.delete('/:id/tracker/settings', loadProjectRole, requireProjectPermission
   }
 });
 
-// #96 Fix: Verbindungstest MIT projekt-spezifischen Settings (falls vorhanden)
+// Verbindungstest MIT projekt-spezifischen Settings – mit ausführlicher Rückmeldung von Git
 router.post('/:id/tracker/settings/test', loadProjectRole, requireProjectPermission('edit_project'), async (req, res) => {
+  const startedAt = Date.now();
   try {
     const tracker = await issueTracker.getProjectTracker(req.params.id);
-    if (!tracker) return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    if (!tracker) return res.status(404).json({ ok: false, error: 'Projekt nicht gefunden', http_status: 404 });
     const type = tracker.issue_tracker_type || 'none';
-    const projectSettings = issueTracker.getEffectiveSettings
-      ? issueTracker.getEffectiveSettings(tracker)
-      : null;
+    const projectSettings = issueTracker.getEffectiveSettings(tracker);
     const opts = { projectSettings };
+    const baseUrl = projectSettings ? projectSettings.base_url : (type === 'github' ? 'https://api.github.com' : null);
     if (type === 'gitlab') {
       const user = await gitlab.gitlabRequest('/user', opts);
-      return res.json({ ok: true, service: 'gitlab', user: { id: user.id, username: user.username, name: user.name }, used_project_settings: !!projectSettings });
+      return res.json({
+        ok: true, service: 'gitlab', http_status: 200,
+        used_project_settings: !!projectSettings,
+        base_url: baseUrl,
+        user: { id: user.id, username: user.username, name: user.name, state: user.state, web_url: user.web_url },
+        response_time_ms: Date.now() - startedAt,
+      });
     }
     if (type === 'github') {
       const user = await github.testConnection(opts);
-      return res.json({ ok: true, service: 'github', user, used_project_settings: !!projectSettings });
+      return res.json({
+        ok: true, service: 'github', http_status: 200,
+        used_project_settings: !!projectSettings,
+        base_url: baseUrl,
+        user: { id: user.id, username: user.login || user.username, name: user.name, type: user.type, web_url: user.html_url },
+        response_time_ms: Date.now() - startedAt,
+      });
     }
-    return res.status(400).json({ ok: false, error: 'Projekt hat keinen Tracker-Typ' });
+    return res.status(400).json({ ok: false, error: 'Projekt hat keinen Tracker-Typ (none)', http_status: 400 });
   } catch (err) {
-    res.status(err.status || 502).json({ ok: false, error: err.message });
+    res.status(err.status || 502).json({
+      ok: false,
+      error: err.message,
+      http_status: err.status || 502,
+      response_time_ms: Date.now() - startedAt,
+    });
   }
 });
 

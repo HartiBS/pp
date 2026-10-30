@@ -35,7 +35,6 @@
           </div>
         </div>
         <button id="profile-btn" class="btn-secondary">Profil</button>
-        <button id="sync-btn" class="btn-secondary">Sync</button>
         <div id="admin-menu-wrapper" class="admin-menu-wrapper" hidden>
           <button id="admin-btn" class="btn-secondary">Admin ▾</button>
           <div id="admin-dropdown" class="admin-dropdown" hidden>
@@ -233,12 +232,15 @@
           </label>
         </div>
         <div id="admin-project-connection-block" hidden style="margin-top:0.75rem; padding:0.75rem; background:var(--bg); border:1px solid var(--border); border-radius:6px;">
-          <h4 style="margin-bottom:0.5rem;">Verbindungsdaten (überschreiben global)</h4>
-          <label>API-URL <input type="url" name="conn_base_url" id="admin-project-conn-base-url" placeholder="https://..."></label>
-          <label>Access Token <input type="password" name="conn_access_token" id="admin-project-conn-access-token" placeholder="(leer lassen = global verwenden)"></label>
-          <label>Service-Account (optional) <input type="text" name="conn_service_account" id="admin-project-conn-sa"></label>
-          <button type="button" id="admin-project-test-conn-btn" class="btn-secondary btn-small">Verbindung testen</button>
+          <h4 style="margin-bottom:0.5rem;">Verbindungsdaten (nur für dieses Projekt)</h4>
+          <label>API-URL <input type="url" name="conn_base_url" id="admin-project-conn-base-url" placeholder="https://gitlab.example.com oder https://api.github.com" required></label>
+          <label>Access Token <input type="password" name="conn_access_token" id="admin-project-conn-access-token" placeholder="Token wird gespeichert" required></label>
+          <label>Service-Account (optional) <input type="text" name="conn_service_account" id="admin-project-conn-sa" placeholder="z. B. pp-bot"></label>
+          <div style="display:flex; gap:0.5rem; margin-top:0.35rem;">
+            <button type="button" id="admin-project-test-conn-btn" class="btn-secondary btn-small">Verbindung testen</button>
+          </div>
           <p id="admin-project-conn-msg" style="font-size:0.8rem; margin-top:0.35rem; min-height:1.2em;"></p>
+          <pre id="admin-project-conn-detail" hidden style="font-size:0.75rem; background:var(--bg-card); border:1px solid var(--border); border-radius:4px; padding:0.5rem; max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; color:var(--text-muted);"></pre>
         </div>
         <div style="display:flex; gap:0.75rem; margin-top:0.5rem;">
           <button type="submit">Speichern</button>
@@ -246,72 +248,6 @@
         </div>
       </form>
       </div><!-- /admin-tab-projects -->
-    </section>
-
-    <section id="sync-view" hidden>
-      <button id="sync-back-btn">← Zurück</button>
-      <h2>Sync-Einstellungen</h2>
-      <p style="color:var(--text-muted); font-size:0.875rem; margin-bottom:1.5rem;">
-        Hier siehst du den Status aller externen Tracker-Verbindungen (GitLab &amp; GitHub).
-        Pro Projekt können eigene Verbindungen in den Projekt-Details hinterlegt werden.
-      </p>
-
-      <div id="sync-status-cards" style="display:flex; gap:1.5rem; flex-wrap:wrap;">
-        <div class="sync-card" id="sync-gitlab-card" style="flex:1; min-width:300px; padding:1.25rem; background:var(--bg-card); border:1px solid var(--border); border-radius:10px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-            <h3 style="margin:0;">🦊 GitLab</h3>
-            <span id="sync-gitlab-status-badge" class="badge">–</span>
-          </div>
-          <p id="sync-gitlab-info" style="color:var(--text-muted); font-size:0.875rem;">Laden...</p>
-          <div id="sync-gitlab-admin-block" hidden>
-            <form id="sync-gitlab-form" style="margin-top:0.75rem;">
-              <label>GitLab-URL <input type="url" name="base_url" placeholder="https://gitlab.example.com" required></label>
-              <label>Access Token <input type="password" name="access_token" required></label>
-              <label>Service-Account (optional) <input type="text" name="service_account_username" placeholder="z. B. pp-serviceaccount"></label>
-              <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-                <button type="submit">Speichern</button>
-                <button type="button" id="sync-gitlab-test-btn" class="btn-secondary">Verbindung testen</button>
-              </div>
-            </form>
-          </div>
-          <p id="sync-gitlab-msg" style="font-size:0.8rem; margin-top:0.5rem; min-height:1.2em;"></p>
-        </div>
-
-        <div class="sync-card" id="sync-github-card" style="flex:1; min-width:300px; padding:1.25rem; background:var(--bg-card); border:1px solid var(--border); border-radius:10px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-            <h3 style="margin:0;">■ GitHub</h3>
-            <span id="sync-github-status-badge" class="badge">–</span>
-          </div>
-          <p id="sync-github-info" style="color:var(--text-muted); font-size:0.875rem;">Laden...</p>
-          <div id="sync-github-admin-block" hidden>
-            <form id="sync-github-form" style="margin-top:0.75rem;">
-              <label>GitHub API-URL <input type="url" name="base_url" placeholder="https://api.github.com" required></label>
-              <label>Access Token <input type="password" name="access_token" required></label>
-              <label>Service-Account (optional) <input type="text" name="service_account_username" placeholder="z. B. pp-bot"></label>
-              <div style="display:flex; gap:0.5rem; margin-top:0.5rem;">
-                <button type="submit">Speichern</button>
-                <button type="button" id="sync-github-test-btn" class="btn-secondary">Verbindung testen</button>
-              </div>
-            </form>
-          </div>
-          <p id="sync-github-msg" style="font-size:0.8rem; margin-top:0.5rem; min-height:1.2em;"></p>
-        </div>
-      </div>
-
-      <h3 style="margin-top:2rem;">Pro-Projekt Verbindungen</h3>
-      <p style="color:var(--text-muted); font-size:0.875rem;">
-        Eigene GitLab/GitHub-Verbindungen pro Projekt werden in der jeweiligen
-        <strong>Projekt-Detailansicht</strong> unter „Issue-Tracker“ → „⚙ Eigene Verbindung“ verwaltet.
-      </p>
-      <div id="sync-project-list-block">
-        <h4>Projekte mit eigenem Tracker</h4>
-        <table id="sync-project-table" style="width:100%; border-collapse:collapse; font-size:0.875rem;">
-          <thead>
-            <tr><th style="text-align:left; padding:0.4rem 0.6rem; border-bottom:1px solid var(--border);">Projekt</th><th style="text-align:left; padding:0.4rem 0.6rem; border-bottom:1px solid var(--border);">Tracker</th><th style="text-align:left; padding:0.4rem 0.6rem; border-bottom:1px solid var(--border);">Eigene Verbindung</th><th style="text-align:left; padding:0.4rem 0.6rem; border-bottom:1px solid var(--border);">Aktion</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
     </section>
 
     <section id="gitlab-projects-view" hidden>
@@ -744,6 +680,6 @@
     </section>
   </main>
 
-  <script src="/js/app.js?v=11"></script>
+  <script src="/js/app.js?v=12"></script>
 </body>
 </html>
