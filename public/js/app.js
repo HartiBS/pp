@@ -2544,7 +2544,9 @@ async function loadAdminProjects() {
       const tr = document.createElement('tr');
       const statusLabels = { active: 'Aktiv', paused: 'Pausiert', done: 'Abgeschlossen', archived: 'Archiviert' };
       const statusLabel = statusLabels[p.status] || p.status || 'active';
-      const trackerLabel = p.issue_tracker_type === 'gitlab' ? 'GitLab' : p.issue_tracker_type === 'github' ? 'GitHub' : '\u2013';
+      let trackerLabel = p.issue_tracker_type === 'gitlab' ? 'GitLab' : p.issue_tracker_type === 'github' ? 'GitHub' : '\u2013';
+      if (p.issue_tracker_type === 'gitlab' && Number(p.has_gitlab_settings) > 0) trackerLabel += ' \u2705';
+      if (p.issue_tracker_type === 'github' && Number(p.has_github_settings) > 0) trackerLabel += ' \u2705';
       tr.innerHTML = `
         <td>${escapeHtml(p.name)}</td>
         <td>${escapeHtml(p.owner_name || '')}</td>
@@ -2648,8 +2650,9 @@ function bindAdminProjectEvents() {
         body.github_repo = null;
       }
       try {
+        // 1. Projekt-Daten inkl. Tracker-Typ speichern
         await api(`/api/admin/projects/${id}`, { method: 'PUT', body });
-        // #96: Verbindungsdaten separat speichern (falls eingegeben)
+        // 2. Verbindungsdaten separat speichern (falls Token eingegeben)
         const connToken = fd.get('conn_access_token');
         const connBaseUrl = fd.get('conn_base_url');
         if (trackerType !== 'none' && connToken && connBaseUrl) {
@@ -3017,19 +3020,20 @@ async function loadAdminProjectConnectionSettings(projectId) {
   const msgEl = $('#admin-project-conn-msg');
   const baseUrlInput = $('#admin-project-conn-base-url');
   const saInput = $('#admin-project-conn-sa');
+  const tokenInput = $('#admin-project-conn-access-token');
   try {
     const s = await api(`/api/projects/${projectId}/tracker/settings`);
     if (s.has_project_settings) {
       if (baseUrlInput) baseUrlInput.value = s.base_url || '';
       if (saInput) saInput.value = s.service_account_username || '';
-      if (msgEl) { msgEl.textContent = 'Projekt-spezifische Verbindung aktiv.'; msgEl.style.color = 'var(--success, #4caf50)'; }
+      if (tokenInput) { tokenInput.value = ''; tokenInput.placeholder = 'Token gespeichert (neu eingeben zum \u00c4ndern)'; }
+      if (msgEl) { msgEl.textContent = '\u2705 Projekt-spezifische Verbindung aktiv: ' + (s.base_url || ''); msgEl.style.color = 'var(--success, #4caf50)'; }
     } else {
       if (baseUrlInput) baseUrlInput.value = '';
       if (saInput) saInput.value = '';
+      if (tokenInput) { tokenInput.value = ''; tokenInput.placeholder = '(leer lassen = global verwenden)'; }
       if (msgEl) { msgEl.textContent = 'Globale Verbindung wird verwendet.'; msgEl.style.color = 'var(--text-muted)'; }
     }
-    const tokenInput = $('#admin-project-conn-access-token');
-    if (tokenInput) tokenInput.value = '';
   } catch (e) {
     if (msgEl) { msgEl.textContent = ''; msgEl.style.color = ''; }
   }

@@ -284,7 +284,9 @@ router.get('/projects', async (req, res) => {
     const { rows } = await db.query(
       `SELECT p.*, u.name AS owner_name,
               (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
-              (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS member_count
+              (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS member_count,
+              (SELECT COUNT(*) FROM project_gitlab_settings pgs WHERE pgs.project_id = p.id) AS has_gitlab_settings,
+              (SELECT COUNT(*) FROM project_github_settings pghs WHERE pghs.project_id = p.id) AS has_github_settings
        FROM projects p
        JOIN users u ON u.id = p.owner_id
        ORDER BY p.updated_at DESC`
@@ -374,7 +376,9 @@ router.get('/my-projects', requireRole('admin', 'projektmanager'), async (req, r
       const result = await db.query(
         `SELECT p.*, u.name AS owner_name,
                 (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
-                (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS member_count
+                (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS member_count,
+                (SELECT COUNT(*) FROM project_gitlab_settings pgs WHERE pgs.project_id = p.id) AS has_gitlab_settings,
+                (SELECT COUNT(*) FROM project_github_settings pghs WHERE pghs.project_id = p.id) AS has_github_settings
          FROM projects p
          JOIN users u ON u.id = p.owner_id
          ORDER BY p.updated_at DESC`
@@ -384,7 +388,9 @@ router.get('/my-projects', requireRole('admin', 'projektmanager'), async (req, r
       const result = await db.query(
         `SELECT p.*, u.name AS owner_name,
                 (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
-                (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS member_count
+                (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS member_count,
+                (SELECT COUNT(*) FROM project_gitlab_settings pgs WHERE pgs.project_id = p.id) AS has_gitlab_settings,
+                (SELECT COUNT(*) FROM project_github_settings pghs WHERE pghs.project_id = p.id) AS has_github_settings
          FROM projects p
          JOIN users u ON u.id = p.owner_id
          LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
