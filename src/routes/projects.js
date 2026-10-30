@@ -72,18 +72,45 @@ router.get('/:id', loadProjectRole, requireProjectPermission('view_project'), as
       'SELECT p.*, u.name AS owner_name FROM projects p JOIN users u ON u.id = p.owner_id WHERE p.id = $1',
       [req.params.id]
     );
-    const { type, label, status, epic_only } = req.query;
+    const { type, label, status, epic_only, priority, sort } = req.query;
     const conditions = ['t.project_id = $1'];
     const params = [req.params.id];
     if (type) { params.push(type); conditions.push(`t.issue_type = $${params.length}`); }
     if (label) { params.push(label); conditions.push(`$${params.length} = ANY(t.labels)`); }
     if (status) { params.push(status); conditions.push(`t.status = $${params.length}`); }
     if (epic_only === 'true') { conditions.push(`t.issue_type = 'epic'`); }
+    // #64: Filter nach Priorität
+    if (priority) {
+      const validPriorities = ['low', 'normal', 'high', 'critical'];
+      if (!validPriorities.includes(priority)) {
+        return res.status(400).json({ error: 'Ungültige Priorität. Erlaubt: low, normal, high, critical' });
+      }
+      params.push(priority); conditions.push(`t.priority = $${params.length}`);
+    }
+    // #71: Filter nach Custom-Field-Werten (?cf_<fieldDefinitionId>=<wert>)
+    for (const [key, value] of Object.entries(req.query)) {
+      const m = key.match(/^cf_(\d+)$/);
+      if (!m) continue;
+      params.push(m[1], String(value));
+      const keyParam = params.length - 1;
+      const valParam = params.length;
+      // JSONB-Pfad: custom_fields->key = wert (textueller Vergleich, gilt für alle Feldtypen)
+      conditions.push(`t.custom_fields->>$${keyParam} = $${valParam}`);
+    }
+    // #64: Sortierung (kritisch zuerst als Default-Ordnung bei sort=priority)
+    let orderBy = 't.created_at DESC';
+    if (sort === 'priority') {
+      orderBy = `CASE t.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 WHEN 'low' THEN 4 ELSE 5 END ASC, t.created_at DESC`;
+    } else if (sort === 'due_date') {
+      orderBy = 't.due_date ASC NULLS LAST, t.created_at DESC';
+    } else if (sort === 'title') {
+      orderBy = 't.title ASC';
+    }
     const tasks = await db.query(
       `SELECT t.*, u.name AS assignee_name
        FROM tasks t LEFT JOIN users u ON u.id = t.assignee_id
        WHERE ${conditions.join(' AND ')}
-       ORDER BY t.created_at DESC`,
+       ORDER BY ${orderBy}`,
       params
     );
     const members = await db.query(
@@ -100,7 +127,7 @@ router.get('/:id', loadProjectRole, requireProjectPermission('view_project'), as
 });
 
 router.put('/:id', loadProjectRole, requireProjectPermission('edit_project'), async (req, res) => {
-  const { name, description, status, issue_tracker_type, gitlab_project_id, github_repo } = req.body;
+  const { name, description, status, issue_tracker_type, gitlab_project_id, github_repo, auto_sync } = req.body;
 
   // #77: Tracker-Typ validieren
   let trackerType = null;
@@ -111,9 +138,8 @@ router.put('/:id', loadProjectRole, requireProjectPermission('edit_project'), as
     trackerType = issue_tracker_type;
   }
 
-  const resetGitlab = gitlab_project_id === null || gitlab_project_id === '';
   let gitlabId = null;
-  if (!resetGitlab && gitlab_project_id !== undefined) {
+  if (gitlab_project_id !== undefined && gitlab_project_id !== null && gitlab_project_id !== '') {
     const n = Number(gitlab_project_id);
     if (!Number.isInteger(n)) {
       return res.status(400).json({ error: 'gitlab_project_id muss eine ganze Zahl sein' });
@@ -134,23 +160,33 @@ router.put('/:id', loadProjectRole, requireProjectPermission('edit_project'), as
   }
 
   try {
-    // #77: Beim Tracker-Wechsel die jeweils andere Verknüpfung zurücksetzen
+    // #77: Beim Tracker-Wechsel die bisherige externe Verknüpfung immer zurücksetzen
+    // (unabhängig davon, ob das Feld im Request mitkommt — sonst bleibt eine
+    // ungültige Kombination aus altem Tracker-Typ + neuer ID stehen).
     let effectiveGitlabId = gitlabId;
     let effectiveGithubRepo = githubRepo;
     let effectiveTrackerType = trackerType;
+    let resetGitlab = gitlab_project_id !== undefined && gitlabId === null;
+    let resetGithub = github_repo !== undefined && githubRepo === null;
 
     if (trackerType !== null) {
       const current = await db.query(
-        'SELECT issue_tracker_type, gitlab_project_id, github_repo FROM projects WHERE id = $1',
+        'SELECT issue_tracker_type FROM projects WHERE id = $1',
         [req.params.id]
       );
       if (current.rows.length > 0) {
         const prevType = current.rows[0].issue_tracker_type || 'none';
         if (prevType !== trackerType) {
-          // Tracker gewechselt — bisherige Verknüpfung löschen
-          if (trackerType !== 'gitlab') effectiveGitlabId = null;
-          if (trackerType !== 'github') effectiveGithubRepo = null;
+          if (trackerType !== 'gitlab') { effectiveGitlabId = null; resetGitlab = true; }
+          if (trackerType !== 'github') { effectiveGithubRepo = null; resetGithub = true; }
         }
+      }
+    }
+
+    // #83: projektweite Auto-Sync-Einstellung
+    if (auto_sync !== undefined && auto_sync !== null) {
+      if (typeof auto_sync !== 'boolean') {
+        return res.status(400).json({ error: 'auto_sync muss ein Boolean sein' });
       }
     }
 
@@ -162,15 +198,17 @@ router.put('/:id', loadProjectRole, requireProjectPermission('edit_project'), as
            issue_tracker_type = COALESCE($4, issue_tracker_type),
            gitlab_project_id = CASE WHEN $5 THEN NULL WHEN $6::int IS NULL THEN gitlab_project_id ELSE $6::int END,
            github_repo = CASE WHEN $7 THEN NULL WHEN $8 IS NULL THEN github_repo ELSE $8 END,
+           auto_sync = COALESCE($10, auto_sync),
            updated_at = NOW()
        WHERE id = $9
        RETURNING *`,
       [
         name, description, status,
         effectiveTrackerType,
-        effectiveGitlabId === null && gitlab_project_id !== undefined, effectiveGitlabId,
-        effectiveGithubRepo === null && github_repo !== undefined, effectiveGithubRepo,
+        resetGitlab, effectiveGitlabId,
+        resetGithub, effectiveGithubRepo,
         req.params.id,
+        auto_sync !== undefined && auto_sync !== null ? auto_sync : null,
       ]
     );
     if (rows.length === 0) {
@@ -206,10 +244,13 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
   const finalAssignee = assignee_id || req.session.userId;
   try {
     const { rows: projectRows } = await db.query(
-      'SELECT gitlab_project_id FROM projects WHERE id = $1',
+      'SELECT gitlab_project_id, issue_tracker_type, github_repo, auto_sync FROM projects WHERE id = $1',
       [req.params.id]
     );
-    const gitlabProjectId = projectRows[0] ? projectRows[0].gitlab_project_id : null;
+    const projectRow = projectRows[0] || {};
+    const gitlabProjectId = projectRow.gitlab_project_id || null;
+    // #83: projektweiter Auto-Sync-Default (an, wenn Tracker konfiguriert und nicht deaktiviert)
+    const projectAutoSync = projectRow.auto_sync !== false;
 
     const estHours = estimated_hours !== undefined && estimated_hours !== null && estimated_hours !== ''
       ? Number(estimated_hours) : null;
@@ -228,8 +269,10 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
     }
 
     let gitlabIid = null;
-    // #57/#77: Task direkt als Issue im externen Tracker anlegen (wenn gewünscht)
-    if (push_to_gitlab || auto_sync) {
+    // #57/#77/#83: Task direkt als Issue im externen Tracker anlegen
+    // (wenn explizit gewünscht ODER projektweiter Auto-Sync aktiv und Tracker konfiguriert)
+    const effectiveAutoSync = auto_sync !== undefined && auto_sync !== null ? auto_sync : projectAutoSync;
+    if (push_to_gitlab || effectiveAutoSync) {
       try {
         const tracker = await issueTracker.getProjectTracker(req.params.id);
         const trackerProjectId = issueTracker.trackerProjectId(tracker);
@@ -307,7 +350,7 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
   const { title, description, status, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, priority, estimated_hours, spent_hours, custom_fields, auto_sync } = req.body;
   try {
     const prev = await db.query(
-      `SELECT t.*, p.gitlab_project_id
+      `SELECT t.*, p.gitlab_project_id, p.issue_tracker_type, p.github_repo, p.auto_sync
        FROM tasks t JOIN projects p ON p.id = t.project_id
        WHERE t.id = $1 AND t.project_id = $2`,
       [req.params.taskId, req.params.id]
@@ -321,6 +364,20 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
     const taskTitle = (title || oldTask.title) || 'Task';
     const gitlabIid = oldTask.gitlab_iid;
     const gitlabProjectId = oldTask.gitlab_project_id;
+    // #83: projektweiter Auto-Sync-Default (an, sofern nicht explizit deaktiviert)
+    const projectAutoSync = oldTask.auto_sync !== false;
+    const effectiveAutoSync = auto_sync !== undefined && auto_sync !== null ? auto_sync : projectAutoSync;
+
+    // #65: Erledigte Tasks mit offenen Subtasks können nicht auf "done" gesetzt werden
+    if (status === 'done' && oldStatus !== 'done') {
+      const openCount = await db.query(
+        'SELECT COUNT(*)::int AS c FROM task_subtasks WHERE task_id = $1 AND is_done = FALSE',
+        [req.params.taskId]
+      );
+      if (openCount.rows[0].c > 0) {
+        return res.status(409).json({ error: `Task kann nicht auf "done" gesetzt werden: ${openCount.rows[0].c} offene(r) Subtask(s)` });
+      }
+    }
 
     // US-25: Priorität validieren
     const validPriorities = ['low', 'normal', 'high', 'critical'];
@@ -389,8 +446,8 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
     // US-24: Historie – Änderungen protokollieren
     await taskHistory.logTaskDiff(updatedTask.id, req.session.userId, oldTask, updatedTask);
 
-    // #83: Auto-Sync — wenn Task noch kein externes Issue hat, aber auto_sync aktiv
-    if (!gitlabIid && auto_sync) {
+    // #83: Auto-Sync — wenn Task noch kein externes Issue hat, aber Auto-Sync aktiv
+    if (!gitlabIid && effectiveAutoSync) {
       try {
         const tracker = await issueTracker.getProjectTracker(req.params.id);
         const trackerProjectId = issueTracker.trackerProjectId(tracker);
@@ -791,34 +848,31 @@ router.post('/:id/tasks/:taskId/relations', loadProjectRole, requireProjectPermi
       return res.status(409).json({ error: 'Relation existiert bereits' });
     }
 
-    // #74: GitLab-Issue-Link erstellen (best effort)
+    // #74: Issue-Link im externen Tracker erstellen (best effort, nur GitLab unterstützt Links)
     try {
-      const tasks = await db.query(
-        'SELECT gitlab_iid FROM tasks WHERE id IN ($1, $2) AND project_id = $3',
-        [parentId, childId, req.params.id]
-      );
-      const projectGitlab = await db.query(
-        'SELECT gitlab_project_id FROM projects WHERE id = $1',
-        [req.params.id]
-      );
-      const gitlabProjectId = projectGitlab.rows[0]?.gitlab_project_id;
-      const parentIid = tasks.rows.find(r => true)?.gitlab_iid; // vereinfacht
-      // Beide Tasks müssen gitlab_iid haben
-      const { rows: bothTasks } = await db.query(
-        'SELECT id, gitlab_iid FROM tasks WHERE id IN ($1, $2)',
-        [parentId, childId]
-      );
-      const pTask = bothTasks.find(t => Number(t.id) === parentId);
-      const cTask = bothTasks.find(t => Number(t.id) === childId);
-      if (gitlabProjectId && pTask?.gitlab_iid && cTask?.gitlab_iid) {
-        if (relType === 'parent_child') {
-          await gitlab.createIssueLink(gitlabProjectId, cTask.gitlab_iid, pTask.gitlab_iid, 'relates_to');
-        } else {
-          await gitlab.createIssueLink(gitlabProjectId, req.params.taskId, Number(target_task_id), 'relates_to');
+      const tracker = await issueTracker.getProjectTracker(req.params.id);
+      if (tracker && tracker.issue_tracker_type === 'gitlab') {
+        const opts = tracker.use_project_settings && tracker.project_gitlab_settings
+          ? { projectSettings: tracker.project_gitlab_settings } : {};
+        const { rows: bothTasks } = await db.query(
+          'SELECT id, gitlab_iid FROM tasks WHERE id IN ($1, $2) AND project_id = $3',
+          [parentId, childId, req.params.id]
+        );
+        const pTask = bothTasks.find(t => Number(t.id) === parentId);
+        const cTask = bothTasks.find(t => Number(t.id) === childId);
+        if (pTask?.gitlab_iid && cTask?.gitlab_iid) {
+          const linkType = relType === 'parent_child' ? 'is_blocked_by' : 'relates_to';
+          await gitlab.createIssueLink(
+            issueTracker.trackerProjectId(tracker),
+            cTask.gitlab_iid,
+            pTask.gitlab_iid,
+            linkType,
+            opts
+          );
         }
       }
-    } catch (gitlabErr) {
-      console.error('GitLab-Link fehlgeschlagen:', gitlabErr.message);
+    } catch (trackerErr) {
+      console.error('Tracker-Link fehlgeschlagen:', trackerErr.message);
     }
 
     // Historie
@@ -844,6 +898,39 @@ router.delete('/:id/tasks/:taskId/relations/:targetTaskId', loadProjectRole, req
     if (!deleted) {
       return res.status(404).json({ error: 'Relation nicht gefunden' });
     }
+
+    // #74: Issue-Links im externen Tracker entfernen (best effort, nur GitLab)
+    try {
+      const tracker = await issueTracker.getProjectTracker(req.params.id);
+      if (tracker && tracker.issue_tracker_type === 'gitlab') {
+        const opts = tracker.use_project_settings && tracker.project_gitlab_settings
+          ? { projectSettings: tracker.project_gitlab_settings } : {};
+        const { rows: bothTasks } = await db.query(
+          'SELECT id, gitlab_iid FROM tasks WHERE id IN ($1, $2) AND project_id = $3',
+          [parentId, childId, req.params.id]
+        );
+        const pTask = bothTasks.find(t => Number(t.id) === parentId);
+        const cTask = bothTasks.find(t => Number(t.id) === childId);
+        const glProjectId = issueTracker.trackerProjectId(tracker);
+        if (glProjectId && pTask?.gitlab_iid && cTask?.gitlab_iid) {
+          for (const [sourceIid, targetIid] of [[cTask.gitlab_iid, pTask.gitlab_iid], [pTask.gitlab_iid, cTask.gitlab_iid]]) {
+            try {
+              const links = await gitlab.getIssueLinks(glProjectId, sourceIid, opts);
+              for (const link of links || []) {
+                if (link.target?.iid === targetIid || link.issue?.iid === targetIid) {
+                  await gitlab.deleteIssueLink(glProjectId, sourceIid, link.id, opts);
+                }
+              }
+            } catch (linkErr) {
+              console.error('Issue-Link löschen fehlgeschlagen:', linkErr.message);
+            }
+          }
+        }
+      }
+    } catch (trackerErr) {
+      console.error('Tracker-Link-Entfernung fehlgeschlagen:', trackerErr.message);
+    }
+
     await taskHistory.logTaskChange(req.params.taskId, req.session.userId, 'updated', 'relation_removed', `Task #${req.params.targetTaskId}`, null);
     res.json({ ok: true });
   } catch (err) {

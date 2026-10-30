@@ -164,6 +164,8 @@ async function syncProjectIssues(projectId, gitlabProjectId, options = {}) {
             taskId,
           ]
         );
+        // #74: Relationen aus dem Meta-Block wiederherstellen (Pull)
+        await taskRelations.restoreFromMeta(taskId, m, projectId);
       }
     }
   }

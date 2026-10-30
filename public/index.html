@@ -366,7 +366,24 @@
           <option value="review">Review</option>
           <option value="done">Done</option>
         </select>
+        <select id="filter-priority">
+          <option value="">Alle Prioritäten</option>
+          <option value="critical">Kritisch</option>
+          <option value="high">Hoch</option>
+          <option value="normal">Normal</option>
+          <option value="low">Niedrig</option>
+        </select>
+        <select id="filter-sort">
+          <option value="">Sortierung: Neu zuerst</option>
+          <option value="priority">Nach Priorität</option>
+          <option value="due_date">Nach Fälligkeit</option>
+          <option value="title">Nach Titel</option>
+        </select>
         <input type="text" id="filter-label" placeholder="Label..." style="max-width:160px;">
+        <select id="filter-custom-field" hidden>
+          <option value="">Alle Zusatzfelder</option>
+        </select>
+        <input type="text" id="filter-custom-field-value" placeholder="Zusatzfeld-Wert..." style="max-width:140px;" hidden>
         <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.875rem; color:var(--text-muted);">
           <input type="checkbox" id="filter-epic-only"> Nur Epics
         </label>
@@ -481,6 +498,9 @@
           </label>
           <label id="github-repo-label" style="flex-direction:row; align-items:center; gap:0.5rem;" hidden>GitHub-Repo
             <input type="text" name="github_repo" id="github-repo-input" placeholder="owner/repo" style="width:180px;">
+          </label>
+          <label style="flex-direction:row; align-items:center; gap:0.5rem; font-size:0.875rem; color:var(--text-muted);" title="Beim Speichern von Tasks automatisch in den konfigurierten Tracker synchronisieren">
+            <input type="checkbox" name="auto_sync" id="project-auto-sync-cb" checked> Auto-Sync bei Task-Speichern
           </label>
           <button type="submit">Speichern</button>
           <button type="button" id="pick-tracker-project-btn" class="btn-secondary" hidden>Repository suchen</button>

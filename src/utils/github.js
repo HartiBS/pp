@@ -1,5 +1,14 @@
 const db = require('../config/database');
+const taskMarkdown = require('./taskMarkdown');
+const taskRelations = require('./taskRelations');
 const { version } = require('../../package.json');
+
+/**
+ * Kodiert "owner/repo" für die GitHub-API, ohne den trennenden Slash zu kodieren.
+ */
+function encodeRepo(repo) {
+  return String(repo).split('/').map(encodeURIComponent).join('/');
+}
 
 /**
  * GitHub-Integration (analog zu gitlab.js).
@@ -81,7 +90,7 @@ function mapGitHubIssue(issue) {
 
 async function syncProjectIssues(projectId, repo, options = {}) {
   const issues = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/issues?per_page=100&state=all&sort=updated&direction=desc`,
+    `/repos/${encodeRepo(repo)}/issues?per_page=100&state=all&sort=updated&direction=desc`,
     { projectSettings: options.projectSettings }
   );
 
@@ -113,6 +122,55 @@ async function syncProjectIssues(projectId, repo, options = {}) {
     'SELECT * FROM gitlab_issues WHERE project_id = $1 ORDER BY synced_at DESC',
     [projectId]
   );
+
+  // #72/#77: GitHub-Issues mit pp-meta in lokale Tasks zurückführen (Pull-Richtung)
+  for (const issue of rows) {
+    const parsed = taskMarkdown.markdownToTaskFields(issue.description || '');
+    if (parsed.meta) {
+      const taskResult = await db.query(
+        'SELECT id FROM tasks WHERE gitlab_iid = $1 AND project_id = $2',
+        [issue.gitlab_iid, projectId]
+      );
+      if (taskResult.rows.length > 0) {
+        const taskId = taskResult.rows[0].id;
+        const m = parsed.meta;
+        let newStatus = null;
+        if (issue.state === 'closed' && m.status !== 'done') {
+          newStatus = 'done';
+        } else if (issue.state === 'opened' && m.status === 'done') {
+          newStatus = 'in_progress';
+        }
+        await db.query(
+          `UPDATE tasks
+           SET title = COALESCE($1, title),
+               description = $2,
+               status = COALESCE($3, status),
+               priority = COALESCE($4, priority),
+               issue_type = COALESCE($5, issue_type),
+               labels = COALESCE($6, labels),
+               due_date = COALESCE($7, due_date),
+               estimated_hours = COALESCE($8, estimated_hours),
+               custom_fields = COALESCE($9, custom_fields),
+               updated_at = NOW()
+           WHERE id = $10`,
+          [
+            issue.title || null,
+            parsed.description || null,
+            newStatus,
+            m.priority || null,
+            m.issue_type || null,
+            Array.isArray(m.labels) ? m.labels : null,
+            m.due_date || null,
+            m.estimated_hours != null ? m.estimated_hours : null,
+            m.custom_fields && Object.keys(m.custom_fields).length > 0 ? m.custom_fields : null,
+            taskId,
+          ]
+        );
+        // #74: Relationen aus dem Meta-Block wiederherstellen (Pull)
+        await taskRelations.restoreFromMeta(taskId, m, projectId);
+      }
+    }
+  }
   return rows;
 }
 
@@ -120,7 +178,7 @@ async function createGitHubIssue(repo, { title, description, labels }, options =
   const body = { title, body: description || '' };
   if (Array.isArray(labels) && labels.length > 0) body.labels = labels;
   const issue = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/issues`,
+    `/repos/${encodeRepo(repo)}/issues`,
     { method: 'POST', body, projectSettings: options.projectSettings }
   );
   return mapGitHubIssue(issue);
@@ -132,7 +190,7 @@ async function updateGitHubIssue(repo, number, { title, description, state_event
   if (description !== undefined) body.body = description;
   if (state_event) body.state = state_event === 'close' ? 'closed' : 'open';
   const issue = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/issues/${number}`,
+    `/repos/${encodeRepo(repo)}/issues/${number}`,
     { method: 'PATCH', body, projectSettings: options.projectSettings }
   );
   return mapGitHubIssue(issue);
@@ -140,7 +198,7 @@ async function updateGitHubIssue(repo, number, { title, description, state_event
 
 async function addGitHubComment(repo, number, note, options = {}) {
   await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/issues/${number}/comments`,
+    `/repos/${encodeRepo(repo)}/issues/${number}/comments`,
     { method: 'POST', body: { body: note }, projectSettings: options.projectSettings }
   );
   return true;
@@ -148,7 +206,7 @@ async function addGitHubComment(repo, number, note, options = {}) {
 
 async function getGitHubComments(repo, number, options = {}) {
   const comments = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/issues/${number}/comments?per_page=100`,
+    `/repos/${encodeRepo(repo)}/issues/${number}/comments?per_page=100`,
     { projectSettings: options.projectSettings }
   );
   return (comments || []).map(c => ({
@@ -201,7 +259,7 @@ async function listGitHubOrgs(options = {}) {
 
 async function listGitHubMilestones(repo, options = {}) {
   const milestones = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/milestones?per_page=100&state=all`,
+    `/repos/${encodeRepo(repo)}/milestones?per_page=100&state=all`,
     { projectSettings: options.projectSettings }
   );
   return (milestones || []).map(m => ({
@@ -216,7 +274,7 @@ async function listGitHubMilestones(repo, options = {}) {
 
 async function listGitHubLabels(repo, options = {}) {
   const labels = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/labels?per_page=100`,
+    `/repos/${encodeRepo(repo)}/labels?per_page=100`,
     { projectSettings: options.projectSettings }
   );
   return labels || [];
@@ -224,7 +282,7 @@ async function listGitHubLabels(repo, options = {}) {
 
 async function listGitHubUsers(repo, options = {}) {
   const users = await githubRequest(
-    `/repos/${encodeURIComponent(repo)}/collaborators?per_page=100`,
+    `/repos/${encodeRepo(repo)}/collaborators?per_page=100`,
     { projectSettings: options.projectSettings }
   );
   return (users || []).map(u => ({ id: u.id, username: u.login, name: u.login }));

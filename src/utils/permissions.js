@@ -41,14 +41,37 @@ async function loadProjectRole(req, res, next) {
   }
 }
 
+// #39: Die Berechtigungs-Matrix wird in der DB (role_permissions) verwaltet und
+// hier durchgesetzt. Fällt auf die hartkodierten Defaults zurück, wenn für eine
+// Rolle kein DB-Eintrag existiert (z. B. vor Migration 009).
+const FALLBACK_PERMISSIONS = PERMISSIONS;
+
+async function getPermissionMatrix() {
+  const { rows } = await db.query('SELECT role, permission FROM role_permissions');
+  const matrix = {};
+  for (const row of rows) {
+    if (!matrix[row.role]) matrix[row.role] = [];
+    matrix[row.role].push(row.permission);
+  }
+  for (const role of Object.keys(FALLBACK_PERMISSIONS)) {
+    if (!matrix[role]) matrix[role] = FALLBACK_PERMISSIONS[role];
+  }
+  return matrix;
+}
+
 function requireProjectPermission(permission) {
-  return (req, res, next) => {
-    const allowed = PERMISSIONS[permission] || [];
-    if (!req.projectRole || !allowed.includes(req.projectRole)) {
-      return res.status(403).json({ error: 'Keine Berechtigung für diese Aktion' });
+  return async (req, res, next) => {
+    try {
+      const matrix = await getPermissionMatrix();
+      const allowed = matrix[req.projectRole] || [];
+      if (!req.projectRole || !allowed.includes(permission)) {
+        return res.status(403).json({ error: 'Keine Berechtigung für diese Aktion' });
+      }
+      next();
+    } catch (err) {
+      next(err);
     }
-    next();
   };
 }
 
-module.exports = { PERMISSIONS, PROJECT_ROLES, getProjectRole, loadProjectRole, requireProjectPermission };
+module.exports = { PERMISSIONS, PROJECT_ROLES, getProjectRole, loadProjectRole, requireProjectPermission, getPermissionMatrix };

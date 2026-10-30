@@ -1,4 +1,4 @@
-const state = { user: null, currentProject: null };
+const state = { user: null, currentProject: null, currentProjectCustomFieldDefs: [] };
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -126,11 +126,18 @@ const canManageMembers = (role) => role === 'admin' || role === 'projektmanager'
 const ISSUE_TYPE_LABELS = { epic: 'Epic', user_story: 'User Story', task: 'Task', bug: 'Bug' };
 
 function currentFilters() {
+  const cfSelect = $('#filter-custom-field');
+  const cfId = cfSelect && !cfSelect.hidden ? cfSelect.value : '';
+  const cfValue = ($('#filter-custom-field-value')?.value || '').trim();
   return {
     type: $('#filter-type').value,
     status: $('#filter-status').value,
+    priority: $('#filter-priority') ? $('#filter-priority').value : '',
+    sort: $('#filter-sort') ? $('#filter-sort').value : '',
     label: $('#filter-label').value.trim(),
     epic_only: $('#filter-epic-only').checked,
+    cf_id: cfId,
+    cf_value: cfValue,
   };
 }
 
@@ -138,8 +145,28 @@ function taskMatchesFilter(t, f) {
   if (f.epic_only && t.issue_type !== 'epic') return false;
   if (f.type && t.issue_type !== f.type) return false;
   if (f.status && t.status !== f.status) return false;
+  if (f.priority && (t.priority || 'normal') !== f.priority) return false;
   if (f.label && !(t.labels || []).includes(f.label)) return false;
+  // #71: clientseitiger Custom-Field-Filter (serverseitig zusätzlich via ?cf_<id>=)
+  if (f.cf_id && f.cf_value) {
+    const v = (t.custom_fields || {})[f.cf_id];
+    if (v === null || v === undefined || String(v) !== f.cf_value) return false;
+  }
   return true;
+}
+
+function sortTasks(tasks, sort) {
+  if (!sort) return tasks;
+  const prioRank = { critical: 1, high: 2, normal: 3, low: 4 };
+  const arr = [...tasks];
+  if (sort === 'priority') {
+    arr.sort((a, b) => (prioRank[a.priority || 'normal'] - prioRank[b.priority || 'normal']) || (b.created_at || '').localeCompare(a.created_at || ''));
+  } else if (sort === 'due_date') {
+    arr.sort((a, b) => ((a.due_date || '9999') .localeCompare(b.due_date || '9999')) || (b.created_at || '').localeCompare(a.created_at || ''));
+  } else if (sort === 'title') {
+    arr.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  }
+  return arr;
 }
 
 function populateAssigneeSelect(members, project, readonly) {
@@ -601,11 +628,15 @@ async function loadProject(id) {
   if (newGitlabIssueBtn) newGitlabIssueBtn.hidden = readonly || !project.gitlab_project_id;
   const pushGitlabLabel = $('#push-gitlab-label');
   if (pushGitlabLabel) pushGitlabLabel.hidden = !project.gitlab_project_id;
-  // #83: Auto-Sync-Checkbox anzeigen, wenn Tracker konfiguriert
+  // #83: Auto-Sync-Checkbox anzeigen, wenn Tracker konfiguriert; Default = projektweite Einstellung
   const hasTracker = !!(project.issue_tracker_type && project.issue_tracker_type !== 'none' &&
     (project.gitlab_project_id || project.github_repo));
   const autoSyncLabel = $('#auto-sync-label');
-  if (autoSyncLabel) autoSyncLabel.hidden = !hasTracker;
+  if (autoSyncLabel) {
+    autoSyncLabel.hidden = !hasTracker;
+    const cb = autoSyncLabel.querySelector('input[name="auto_sync"]');
+    if (cb) cb.checked = project.auto_sync !== false;
+  }
 
   // #56: Beim Öffnen automatisch mit GitLab synchronisieren (falls verknüpft)
   if (project.gitlab_project_id) {
@@ -614,6 +645,11 @@ async function loadProject(id) {
   loadGitLabIssues(id);
 
   state.allTasks = tasks;
+  // #71: aktive Custom-Field-Definitionen für den Filter laden
+  try {
+    const { definitions } = await api(`/api/projects/${id}/custom-fields/active`);
+    state.currentProjectCustomFieldDefs = definitions || [];
+  } catch { state.currentProjectCustomFieldDefs = []; }
   renderCurrentProjectView(readonly, id);
   if (state.projectTab === 'dashboard') {
     loadProjectDashboard(id);
@@ -624,8 +660,9 @@ async function loadProject(id) {
 function renderCurrentProjectView(readonly, projectId) {
   const tasks = state.allTasks || [];
   const f = currentFilters();
-  const filtered = tasks.filter(t => taskMatchesFilter(t, f));
+  const filtered = sortTasks(tasks.filter(t => taskMatchesFilter(t, f)), f.sort);
   $('#filter-bar').hidden = state.projectTab === 'dashboard';
+  updateCustomFieldFilterOptions();
 
   if (state.projectTab === 'list') {
     renderTaskList(filtered, readonly, projectId);
@@ -1075,17 +1112,42 @@ bind('#tab-list-btn', () => { setProjectTab('list'); renderCurrentProjectView(!c
 bind('#tab-board-btn', () => { setProjectTab('board'); renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id); });
 bind('#tab-timeline-btn', () => { setProjectTab('timeline'); renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id); });
 
-for (const el of ['#filter-type', '#filter-status', '#filter-label', '#filter-epic-only']) {
+for (const el of ['#filter-type', '#filter-status', '#filter-priority', '#filter-sort', '#filter-label', '#filter-epic-only', '#filter-custom-field', '#filter-custom-field-value']) {
   const node = $(el);
   if (node) node.addEventListener('change', () => renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id));
+}
+const cfValueInput = $('#filter-custom-field-value');
+if (cfValueInput) {
+  cfValueInput.addEventListener('input', () => renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id));
+  $('#filter-custom-field').addEventListener('change', () => {
+    cfValueInput.hidden = !$('#filter-custom-field').value;
+  });
 }
 bind('#filter-reset-btn', () => {
   $('#filter-type').value = '';
   $('#filter-status').value = '';
+  if ($('#filter-priority')) $('#filter-priority').value = '';
+  if ($('#filter-sort')) $('#filter-sort').value = '';
   $('#filter-label').value = '';
   $('#filter-epic-only').checked = false;
+  $('#filter-custom-field').value = '';
+  $('#filter-custom-field-value').value = '';
+  $('#filter-custom-field-value').hidden = true;
   renderCurrentProjectView(!canEdit(state.myProjectRole), state.currentProject.id);
 });
+
+// #71: Zusatzfeld-Dropdown im Filter mit den aktiven Feldern des Projekts befüllen
+function updateCustomFieldFilterOptions() {
+  const sel = $('#filter-custom-field');
+  if (!sel) return;
+  const defs = state.currentProjectCustomFieldDefs || [];
+  if (!defs.length) { sel.hidden = true; $('#filter-custom-field-value').hidden = true; return; }
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Alle Zusatzfelder</option>' +
+    defs.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+  sel.value = prev;
+  sel.hidden = false;
+}
 
 for (const status of ['todo', 'in_progress', 'review', 'done']) {
   const col = $(`#col-${status}`);
@@ -1331,6 +1393,8 @@ function renderTaskDetail(data) {
       state.currentProject.issue_tracker_type !== 'none' &&
       (state.currentProject.gitlab_project_id || state.currentProject.github_repo));
     tdAutoSyncLabel.hidden = !hasTracker;
+    const cb = tdAutoSyncLabel.querySelector('input[name="auto_sync"]');
+    if (cb) cb.checked = state.currentProject.auto_sync !== false;
   }
 
   // Watch button
@@ -2288,6 +2352,8 @@ function renderTrackerForm(tracker) {
   const typeSelect = $('#tracker-type-select');
   typeSelect.value = tracker.type || 'none';
   updateTrackerFormVisibility(tracker.type || 'none');
+  const autoCb = $('#project-auto-sync-cb');
+  if (autoCb && state.currentProject) autoCb.checked = state.currentProject.auto_sync !== false;
 
   if (tracker.type === 'gitlab') {
     $('#gitlab-project-id-input').value = tracker.gitlab_project_id || '';
@@ -2320,7 +2386,7 @@ function bindTrackerEvents() {
       if (!state.currentProject) return;
       const fd = new FormData(e.target);
       const type = fd.get('issue_tracker_type');
-      const body = { issue_tracker_type: type };
+      const body = { issue_tracker_type: type, auto_sync: fd.get('auto_sync') === 'on' };
       if (type === 'gitlab') {
         const gid = fd.get('gitlab_project_id');
         body.gitlab_project_id = gid ? Number(gid) : null;

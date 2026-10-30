@@ -193,6 +193,42 @@ async function getChildrenProgress(taskId) {
   return { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
 }
 
+/**
+ * #74: Stellt Relationen aus dem Markdown-Meta-Block wieder her (Pull-Richtung).
+ * Erzeugt fehlende Relationen (best effort), Zyklus-Prüfung greift dabei.
+ * @param {number} taskId - Lokaler Task, dessen Meta-Block geparst wurde
+ * @param {object} meta - Geparstes pp-meta (enthält parent/children/related)
+ * @param {number} projectId - Projekt-ID (für Same-Project-Prüfung)
+ */
+async function restoreFromMeta(taskId, meta, projectId) {
+  if (!meta || typeof meta !== 'object') return;
+  const candidates = [];
+  if (meta.parent && meta.parent.id) {
+    candidates.push({ parentId: Number(meta.parent.id), childId: Number(taskId), type: 'parent_child' });
+  }
+  if (Array.isArray(meta.children)) {
+    for (const c of meta.children) {
+      if (c && c.id) candidates.push({ parentId: Number(taskId), childId: Number(c.id), type: 'parent_child' });
+    }
+  }
+  if (Array.isArray(meta.related)) {
+    for (const r of meta.related) {
+      if (!r || !r.id) continue;
+      const other = Number(r.id);
+      const parentId = r.direction === 'parent' ? other : Number(taskId);
+      const childId = r.direction === 'parent' ? Number(taskId) : other;
+      candidates.push({ parentId, childId, type: 'relates_to' });
+    }
+  }
+  for (const c of candidates) {
+    try {
+      await createRelation(c.parentId, c.childId, c.type);
+    } catch {
+      // Relation existiert bereits, ist Zyklus oder Tasks nicht im selben Projekt — ignorieren
+    }
+  }
+}
+
 module.exports = {
   VALID_RELATION_TYPES,
   createRelation,
@@ -204,4 +240,5 @@ module.exports = {
   getParentChain,
   getChildrenProgress,
   wouldCreateCycle,
+  restoreFromMeta,
 };

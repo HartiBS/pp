@@ -38,11 +38,13 @@ router.get('/users', async (req, res) => {
 router.post('/users', async (req, res) => {
   const { email, password, firstName, lastName, username, roles: userRoles } = req.body;
   const roleList = Array.isArray(userRoles) ? userRoles : (req.body.role ? [req.body.role] : []);
+  // #54: Beim Anlegen durch den Admin reichen Username, Passwort und Rolle.
+  // E-Mail/Vorname/Nachname sind optional (Login geht dann nur per Benutzername).
   if (!username || !password || roleList.length === 0) {
     return res.status(400).json({ error: 'Benutzername, Passwort und mindestens eine Rolle sind erforderlich' });
   }
-  if (!email || !firstName) {
-    return res.status(400).json({ error: 'E-Mail und Vorname sind ebenfalls erforderlich' });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Ungültige E-Mail-Adresse' });
   }
   if (!/^[a-zA-Z0-9_.-]{3,50}$/.test(username)) {
     return res.status(400).json({ error: 'Benutzername: 3-50 Zeichen (Buchstaben, Zahlen, _ . -)' });
@@ -51,14 +53,14 @@ router.post('/users', async (req, res) => {
   if (invalid.length > 0) {
     return res.status(400).json({ error: `Ungültige Rolle(n): ${invalid.join(', ')}. Erlaubt: ${roles.ALL_ROLES.join(', ')}` });
   }
-  const name = [firstName, lastName].filter(Boolean).join(' ');
+  const name = [firstName, lastName].filter(Boolean).join(' ') || username;
 
   try {
     const hash = await bcrypt.hash(password, 10);
     const { rows } = await db.query(
       `INSERT INTO users (email, password_hash, name, first_name, last_name, username, role)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING ${USER_FIELDS}`,
-      [email, hash, name, firstName, lastName || null, username, roles.effectiveRole(roleList)]
+      [email || null, hash, name, firstName || null, lastName || null, username, roles.effectiveRole(roleList)]
     );
     await roles.setUserRoles(rows[0].id, roleList);
     const user = { ...rows[0], roles: roleList, role: roles.effectiveRole(roleList) };
@@ -69,7 +71,7 @@ router.post('/users', async (req, res) => {
       if (detail.includes('username')) {
         return res.status(409).json({ error: 'Benutzername bereits vergeben' });
       }
-      return res.status(409).json({ error: 'E-Mail bereits registriert' });
+      return res.status(409).json({ error: 'E-Mail bereits vergeben' });
     }
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
