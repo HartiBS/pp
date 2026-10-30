@@ -1123,6 +1123,30 @@ router.delete('/:id/tracker/settings', loadProjectRole, requireProjectPermission
   }
 });
 
+// #96 Fix: Verbindungstest MIT projekt-spezifischen Settings (falls vorhanden)
+router.post('/:id/tracker/settings/test', loadProjectRole, requireProjectPermission('edit_project'), async (req, res) => {
+  try {
+    const tracker = await issueTracker.getProjectTracker(req.params.id);
+    if (!tracker) return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    const type = tracker.issue_tracker_type || 'none';
+    const projectSettings = issueTracker.getEffectiveSettings
+      ? issueTracker.getEffectiveSettings(tracker)
+      : null;
+    const opts = { projectSettings };
+    if (type === 'gitlab') {
+      const user = await gitlab.gitlabRequest('/user', opts);
+      return res.json({ ok: true, service: 'gitlab', user: { id: user.id, username: user.username, name: user.name }, used_project_settings: !!projectSettings });
+    }
+    if (type === 'github') {
+      const user = await github.testConnection(opts);
+      return res.json({ ok: true, service: 'github', user, used_project_settings: !!projectSettings });
+    }
+    return res.status(400).json({ ok: false, error: 'Projekt hat keinen Tracker-Typ' });
+  } catch (err) {
+    res.status(err.status || 502).json({ ok: false, error: err.message });
+  }
+});
+
 // ===== Issue #71: Custom Fields pro Projekt =====
 
 // GET: Alle Custom-Field-Definitionen mit Aktivierungsstatus für dieses Projekt

@@ -2981,7 +2981,7 @@ function bindSyncViewEvents() {
       const r = await api('/api/sync/test/gitlab', { method: 'POST' });
       if (msgEl) { msgEl.textContent = `\u2705 Verbindung OK: @${r.user.username} (${r.user.name || r.user.username})`; msgEl.style.color = 'var(--success, #4caf50)'; }
     } catch (err) {
-      if (msgEl) { msgEl.textContent = '\u274c ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
+      if (msgEl) { msgEl.textContent = '\u274c ' + err.message + ' (projekt-spezifisch in Projekt-Details testen)'; msgEl.style.color = 'var(--danger, #f44336)'; }
     }
   });
 
@@ -2992,7 +2992,7 @@ function bindSyncViewEvents() {
       const r = await api('/api/sync/test/github', { method: 'POST' });
       if (msgEl) { msgEl.textContent = `\u2705 Verbindung OK: @${r.user.username} (${r.user.name || r.user.username})`; msgEl.style.color = 'var(--success, #4caf50)'; }
     } catch (err) {
-      if (msgEl) { msgEl.textContent = '\u274c ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
+      if (msgEl) { msgEl.textContent = '\u274c ' + err.message + ' (projekt-spezifisch in Projekt-Details testen)'; msgEl.style.color = 'var(--danger, #f44336)'; }
     }
   });
 }
@@ -3040,13 +3040,13 @@ bind('#admin-project-test-conn-btn', async () => {
   const form = $('#admin-project-form');
   if (!form || form.elements['id'].value === '') return;
   const projectId = form.elements['id'].value;
-  const trackerType = form.elements['issue_tracker_type'].value;
   const msgEl = $('#admin-project-conn-msg');
   if (msgEl) { msgEl.textContent = 'Teste...'; msgEl.style.color = 'var(--text-muted)'; }
   try {
-    const endpoint = trackerType === 'gitlab' ? '/api/sync/test/gitlab' : '/api/sync/test/github';
-    const r = await api(endpoint, { method: 'POST' });
-    if (msgEl) { msgEl.textContent = '✅ OK: @' + (r.user.username || r.user.login); msgEl.style.color = 'var(--success, #4caf50)'; }
+    // #96 Fix: Teste MIT projekt-spezifischen Settings (falls gespeichert)
+    const r = await api(`/api/projects/${projectId}/tracker/settings/test`, { method: 'POST' });
+    const src = r.used_project_settings ? ' (projekt-spezifisch)' : ' (global)';
+    if (msgEl) { msgEl.textContent = '✅ OK: @' + (r.user.username || r.user.login) + src; msgEl.style.color = 'var(--success, #4caf50)'; }
   } catch (err) {
     if (msgEl) { msgEl.textContent = '❌ ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
   }

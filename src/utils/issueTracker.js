@@ -257,6 +257,7 @@ async function testConnection(trackerType) {
 
 module.exports = {
   getProjectTracker,
+  getEffectiveSettings,
   trackerName,
   trackerProjectId,
   createIssue,
