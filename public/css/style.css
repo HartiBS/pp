@@ -1190,3 +1190,48 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 #sync-project-table tbody tr:hover {
   background: var(--bg-hover, rgba(255,255,255,0.03));
 }
+
+/* ===== Admin Dropdown Menu (#89, #90) ===== */
+.admin-menu-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.admin-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.25rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  min-width: 200px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.admin-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.admin-dropdown-item:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.05));
+}
+
+.admin-dropdown-item:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+
+#admin-tab-users,
+#admin-tab-projects {
+  min-height: 200px;
+}

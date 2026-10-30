@@ -68,8 +68,11 @@ function setUser(user) {
   $('#user-name').textContent = user.name;
   $('#user-avatar').textContent = avatarInitials(user.name);
   $('#user-box').hidden = false;
-  const adminBtn = $('#admin-btn');
-  if (adminBtn) adminBtn.hidden = !(user.roles || []).includes('admin');
+  const adminMenu = $('#admin-menu-wrapper');
+  if (adminMenu) {
+    const roles = user.roles || [];
+    adminMenu.hidden = !(roles.includes('admin') || roles.includes('projektmanager'));
+  }
 }
 
 const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'sync-view', 'gitlab-issue-view', 'gitlab-projects-view', 'task-detail-view'];
@@ -788,7 +791,7 @@ async function loadProfile() {
   show('profile-view');
 }
 
-async function loadAdmin() {
+async function loadAdmin(defaultTab) {
   loadGitLabSettings();
   const { users } = await api('/api/admin/users');
   renderUserRoleMatrix(users);
@@ -824,6 +827,9 @@ async function loadAdmin() {
   }
   // #71: Load custom field definitions
   await loadCustomFieldDefinitions();
+  // #89/#90: Tab auswählen
+  switchAdminTab(defaultTab === 'projects' ? 'projects' : 'users');
+  if (defaultTab === 'projects') await loadAdminProjects();
   show('admin-view');
 }
 
@@ -1027,7 +1033,40 @@ document.addEventListener('submit', async (e) => {
   }
 });
 
-bind('#admin-btn', () => loadAdmin());
+bind('#admin-btn', (e) => {
+  e.stopPropagation();
+  const dd = $('#admin-dropdown');
+  if (dd) dd.hidden = !dd.hidden;
+});
+document.addEventListener('click', (e) => {
+  const dd = $('#admin-dropdown');
+  const wrapper = $('#admin-menu-wrapper');
+  if (dd && wrapper && !wrapper.contains(e.target)) dd.hidden = true;
+});
+bind('#admin-users-btn', () => {
+  const dd = $('#admin-dropdown');
+  if (dd) dd.hidden = true;
+  loadAdmin('users');
+});
+bind('#admin-projects-btn', () => {
+  const dd = $('#admin-dropdown');
+  if (dd) dd.hidden = true;
+  loadAdmin('projects');
+});
+bind('#admin-tab-users-btn', () => switchAdminTab('users'));
+bind('#admin-tab-projects-btn', () => switchAdminTab('projects'));
+
+function switchAdminTab(tab) {
+  const usersBtn = $('#admin-tab-users-btn');
+  const projectsBtn = $('#admin-tab-projects-btn');
+  const usersDiv = $('#admin-tab-users');
+  const projectsDiv = $('#admin-tab-projects');
+  if (usersBtn) usersBtn.classList.toggle('active', tab === 'users');
+  if (projectsBtn) projectsBtn.classList.toggle('active', tab === 'projects');
+  if (usersDiv) usersDiv.hidden = tab !== 'users';
+  if (projectsDiv) projectsDiv.hidden = tab !== 'projects';
+  if (tab === 'projects') loadAdminProjects();
+}
 bind('#admin-back-btn', () => loadDashboard());
 
 bind('#new-user-btn', () => {
@@ -2124,8 +2163,8 @@ bindTaskDetailEvents = function() {
 /* ===== HOOK INTO loadAdmin TO LOAD CUSTOM FIELDS ===== */
 const _origLoadAdmin = typeof loadAdmin !== 'undefined' ? loadAdmin : null;
 if (_origLoadAdmin) {
-  window.loadAdmin = async function() {
-    await _origLoadAdmin();
+  window.loadAdmin = async function(defaultTab) {
+    await _origLoadAdmin(defaultTab);
     try { await loadCustomFieldDefinitions(); } catch (e) { console.error('loadCustomFieldDefinitions:', e.message); }
   };
 }
@@ -2461,8 +2500,8 @@ loadProject = async function(id) {
 const _origLoadAdminGh = typeof loadAdmin !== 'undefined' ? loadAdmin : null;
 if (_origLoadAdminGh) {
   const _prevLoadAdminGh = window.loadAdmin || _origLoadAdminGh;
-  window.loadAdmin = async function() {
-    await _prevLoadAdminGh();
+  window.loadAdmin = async function(defaultTab) {
+    await _prevLoadAdminGh(defaultTab);
     try { await loadGitHubSettings(); } catch (e) { console.error('loadGitHubSettings:', e.message); }
   };
 }
@@ -2483,7 +2522,10 @@ async function loadAdminProjects() {
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Laden...</td></tr>';
   try {
-    const { projects } = await api('/api/admin/projects');
+    // #90: Projektmanager sehen nur eigene Projekte, Admins alle
+    const isAdmin = (state.user && state.user.roles || []).includes('admin');
+    const endpoint = isAdmin ? '/api/admin/projects' : '/api/admin/my-projects';
+    const { projects } = await api(endpoint);
     tbody.innerHTML = '';
     if (!projects || projects.length === 0) {
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Keine Projekte vorhanden.</td></tr>';
@@ -2591,7 +2633,9 @@ async function loadProjectTrackerSettings(projectId) {
     block.hidden = true;
     return;
   }
-  toggleBtn.hidden = false;
+  // #91: Button nur anzeigen wenn User edit_project-Rechte hat (admin/projektmanager)
+  const canEditProject = state.currentProject && ['admin', 'projektmanager'].includes(state.currentProject.my_role);
+  toggleBtn.hidden = !canEditProject;
 
   // Settings laden
   try {
@@ -2694,8 +2738,8 @@ function hideSyncIndicator() {
 const _origLoadAdminFinal = typeof loadAdmin !== 'undefined' ? loadAdmin : null;
 if (_origLoadAdminFinal) {
   const _prevLoadAdmin2 = window.loadAdmin || _origLoadAdminFinal;
-  window.loadAdmin = async function() {
-    await _prevLoadAdmin2();
+  window.loadAdmin = async function(defaultTab) {
+    await _prevLoadAdmin2(defaultTab);
     try { await loadAdminProjects(); } catch (e) { console.error('loadAdminProjects:', e.message); }
   };
 }

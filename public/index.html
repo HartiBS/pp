@@ -36,7 +36,13 @@
         </div>
         <button id="profile-btn" class="btn-secondary">Profil</button>
         <button id="sync-btn" class="btn-secondary">Sync</button>
-        <button id="admin-btn" class="btn-secondary" hidden>Benutzerverwaltung</button>
+        <div id="admin-menu-wrapper" class="admin-menu-wrapper" hidden>
+          <button id="admin-btn" class="btn-secondary">Admin ▾</button>
+          <div id="admin-dropdown" class="admin-dropdown" hidden>
+            <button id="admin-users-btn" class="admin-dropdown-item" type="button">👥 Benutzerverwaltung</button>
+            <button id="admin-projects-btn" class="admin-dropdown-item" type="button">📁 Projektverwaltung</button>
+          </div>
+        </div>
         <button id="logout-btn">Abmelden</button>
       </div>
     </nav>
@@ -102,6 +108,11 @@
 
     <section id="admin-view" hidden>
       <button id="admin-back-btn">← Zurück</button>
+      <div class="view-tabs" style="margin-bottom:1.5rem;">
+        <button id="admin-tab-users-btn" class="view-tab active" type="button">👥 Benutzerverwaltung</button>
+        <button id="admin-tab-projects-btn" class="view-tab" type="button">📁 Projektverwaltung</button>
+      </div>
+      <div id="admin-tab-users">
       <div class="dashboard-header">
         <h2>Benutzerverwaltung</h2>
         <button id="new-user-btn">+ Neuer Benutzer</button>
@@ -206,7 +217,9 @@
       </form>
       <p id="github-settings-msg"></p>
 
-      <h2 style="margin-top:2rem;">Projektverwaltung (Admin)</h2>
+      </div><!-- /admin-tab-users -->
+      <div id="admin-tab-projects" hidden>
+      <h2>Projektverwaltung</h2>
       <p style="color:var(--text-muted); font-size:0.875rem;">Alle Projekte bearbeiten und löschen.</p>
       <table id="admin-project-table" style="margin-top:1rem;">
         <thead>
@@ -235,6 +248,7 @@
           <button type="button" id="admin-project-cancel-btn" class="btn-secondary">Abbrechen</button>
         </div>
       </form>
+      </div><!-- /admin-tab-projects -->
     </section>
 
     <section id="sync-view" hidden>
@@ -733,6 +747,6 @@
     </section>
   </main>
 
-  <script src="/js/app.js?v=7"></script>
+  <script src="/js/app.js?v=8"></script>
 </body>
 </html>

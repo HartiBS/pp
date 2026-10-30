@@ -357,4 +357,41 @@ router.get('/projects-users', async (req, res) => {
   }
 });
 
+
+// ===== Issue #90: Projektverwaltung für Projektmanager (nur eigene Projekte) =====
+router.get('/my-projects', requireRole('admin', 'projektmanager'), async (req, res) => {
+  try {
+    const isAdmin = req.currentUser.roles.includes('admin');
+    let rows;
+    if (isAdmin) {
+      const result = await db.query(
+        `SELECT p.*, u.name AS owner_name,
+                (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
+                (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS member_count
+         FROM projects p
+         JOIN users u ON u.id = p.owner_id
+         ORDER BY p.updated_at DESC`
+      );
+      rows = result.rows;
+    } else {
+      const result = await db.query(
+        `SELECT p.*, u.name AS owner_name,
+                (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id) AS task_count,
+                (SELECT COUNT(*) FROM project_members pm WHERE pm.project_id = p.id) AS member_count
+         FROM projects p
+         JOIN users u ON u.id = p.owner_id
+         LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $1
+         WHERE p.owner_id = $1 OR (pm.role = 'projektmanager')
+         ORDER BY p.updated_at DESC`,
+        [req.session.userId]
+      );
+      rows = result.rows;
+    }
+    res.json({ projects: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
 module.exports = router;
