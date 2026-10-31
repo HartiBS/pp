@@ -304,6 +304,11 @@ router.get('/projects', async (req, res) => {
 router.put('/projects/:id', async (req, res) => {
   const { name, description, status, owner_id, issue_tracker_type, gitlab_project_id, github_repo,
           conn_base_url, conn_access_token, conn_service_account } = req.body;
+  console.log('[PUT /admin/projects/:id]', req.params.id, JSON.stringify({
+    issue_tracker_type, gitlab_project_id, github_repo,
+    has_conn_base_url: !!conn_base_url, has_conn_token: !!conn_access_token,
+    conn_base_url,
+  }));
   try {
     // Validate status
     if (status !== undefined && !['active', 'paused', 'done', 'archived'].includes(status)) {
@@ -349,6 +354,7 @@ router.put('/projects/:id', async (req, res) => {
     }
     // #105: Tracker-Verbindungsdaten im selben Request speichern
     const savedType = issue_tracker_type !== undefined ? issue_tracker_type : rows[0].issue_tracker_type;
+    console.log('[PUT /admin/projects/:id] savedType=', savedType, 'conn?', !!(conn_base_url && conn_access_token));
     if (savedType === 'gitlab' || savedType === 'github') {
       if (conn_base_url && conn_access_token) {
         if (savedType === 'gitlab') {
