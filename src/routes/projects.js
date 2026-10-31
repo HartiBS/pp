@@ -10,7 +10,6 @@ const taskWatchers = require('../utils/taskWatchers');
 const taskComments = require('../utils/taskComments');
 const taskSubtasks = require('../utils/taskSubtasks');
 const customFields = require('../utils/customFields');
-const taskMarkdown = require('../utils/taskMarkdown');
 const taskRelations = require('../utils/taskRelations');
 const issueTracker = require('../utils/issueTracker');
 
@@ -300,19 +299,19 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
         const tracker = await issueTracker.getProjectTracker(req.params.id);
         const trackerProjectId = issueTracker.trackerProjectId(tracker);
         if (trackerProjectId) {
-          // #72: Task als Markdown serialisieren
+          // #72 + Tracker-Mapping: Task-Felder gemäß Mapping ins Payload übersetzen;
+          // nicht gemappte Felder landen als Markdown in der Beschreibung.
           const activeCfDefs = await customFields.getProjectFieldDefinitions(req.params.id);
-          const mdDescription = taskMarkdown.taskToMarkdown(
-            {
-              title, description: description || '', status: 'todo',
-              priority: taskPriority, issue_type: issue_type || 'task',
-              labels: Array.isArray(labels) ? labels : [],
-              due_date: due_date || null, estimated_hours: estHours, spent_hours: 0,
-              custom_fields: cleanedCustomFields,
-            },
-            { customFieldDefs: activeCfDefs, subtasks: [] }
-          );
-          const created = await issueTracker.createIssue(tracker, { title, description: mdDescription, labels: Array.isArray(labels) ? labels : [] });
+          const pushTask = {
+            title, description: description || '', status: 'todo',
+            priority: taskPriority, issue_type: issue_type || 'task',
+            labels: Array.isArray(labels) ? labels : [],
+            due_date: due_date || null, estimated_hours: estHours, spent_hours: 0,
+            assignee_id: finalAssignee, milestone_id: milestone_id || null,
+            custom_fields: cleanedCustomFields,
+          };
+          const payload = await issueTracker.buildPushPayload(tracker, pushTask, { customFieldDefs: activeCfDefs, subtasks: [] });
+          const created = await issueTracker.createIssue(tracker, payload);
           gitlabIid = created.gitlab_iid;
           await db.query(
             `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
@@ -482,13 +481,10 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
             taskRelations.getChildren(updatedTask.id),
             taskRelations.getRelatedTasks(updatedTask.id),
           ]);
-          const mdDescription = taskMarkdown.taskToMarkdown(updatedTask, {
+          const payload = await issueTracker.buildPushPayload(tracker, updatedTask, {
             customFieldDefs: activeCfDefs, subtasks, parent, children, related,
           });
-          const created = await issueTracker.createIssue(tracker, {
-            title: updatedTask.title, description: mdDescription,
-            labels: Array.isArray(updatedTask.labels) ? updatedTask.labels : [],
-          });
+          const created = await issueTracker.createIssue(tracker, payload);
           // gitlab_iid setzen
           await db.query('UPDATE tasks SET gitlab_iid = $1 WHERE id = $2', [created.gitlab_iid, updatedTask.id]);
           updatedTask.gitlab_iid = created.gitlab_iid;
@@ -512,9 +508,10 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
         if (trackerProjectId && extId) {
           const trackerUpdate = {};
           if (title) trackerUpdate.title = title;
-          // #72: Beschreibung als Markdown serialisieren
+          // #72 + Tracker-Mapping: Beschreibung gemäß Mapping serialisieren
           if (description !== undefined || status !== undefined || priority !== undefined ||
-              estimated_hours !== undefined || spent_hours !== undefined || custom_fields !== undefined) {
+              estimated_hours !== undefined || spent_hours !== undefined || custom_fields !== undefined ||
+              assignee_id !== undefined || milestone_id !== undefined || labels !== undefined || issue_type !== undefined) {
             const activeCfDefs = await customFields.getProjectFieldDefinitions(req.params.id);
             const subtasks = await taskSubtasks.getSubtasks(updatedTask.id);
             const [parent, children, related] = await Promise.all([
@@ -522,9 +519,15 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
               taskRelations.getChildren(updatedTask.id),
               taskRelations.getRelatedTasks(updatedTask.id),
             ]);
-            trackerUpdate.description = taskMarkdown.taskToMarkdown(updatedTask, {
+            const fullPayload = await issueTracker.buildPushPayload(tracker, updatedTask, {
               customFieldDefs: activeCfDefs, subtasks, parent, children, related,
             });
+            trackerUpdate.description = fullPayload.description;
+            if (fullPayload.labels && labels === undefined) trackerUpdate.labels = fullPayload.labels;
+            if (fullPayload.due_date && due_date === undefined) trackerUpdate.due_date = fullPayload.due_date;
+            if (fullPayload.milestone_id !== undefined && milestone_id === undefined) trackerUpdate.milestone_id = fullPayload.milestone_id;
+            if (fullPayload.time_estimate !== undefined && estimated_hours === undefined) trackerUpdate.time_estimate = fullPayload.time_estimate;
+            if (fullPayload.time_spent !== undefined && spent_hours === undefined) trackerUpdate.time_spent = fullPayload.time_spent;
           }
           if (status && status !== oldStatus) {
             trackerUpdate.state_event = status === 'done' ? 'close' : 'reopen';

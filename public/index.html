@@ -40,6 +40,7 @@
           <div id="admin-dropdown" class="admin-dropdown" hidden>
             <button id="admin-users-btn" class="admin-dropdown-item" type="button">👥 Benutzerverwaltung</button>
             <button id="admin-projects-btn" class="admin-dropdown-item" type="button">📁 Projektverwaltung</button>
+            <button id="admin-mapping-btn" class="admin-dropdown-item" type="button">🔗 Tracker-Mapping</button>
           </div>
         </div>
         <button id="logout-btn">Abmelden</button>
@@ -118,6 +119,7 @@
       <div class="view-tabs" style="margin-bottom:1.5rem;">
         <button id="admin-tab-users-btn" class="view-tab active" type="button">👥 Benutzerverwaltung</button>
         <button id="admin-tab-projects-btn" class="view-tab" type="button">📁 Projektverwaltung</button>
+        <button id="admin-tab-mapping-btn" class="view-tab" type="button">🔗 Tracker-Mapping</button>
       </div>
       <div id="admin-tab-users">
       <div class="dashboard-header">
@@ -256,6 +258,64 @@
         </div>
       </form>
       </div><!-- /admin-tab-projects -->
+      <div id="admin-tab-mapping" hidden>
+      <h2>Tracker-Mapping (GitHub &amp; GitLab)</h2>
+      <p style="color:var(--text-muted); font-size:0.875rem;">Ordne die Felder der externen Issues deinen eigenen Task-Feldern zu — inklusive deiner Custom Fields. <strong>Nicht gemappte eigene Felder</strong> werden beim Push als Markdown ins Kommentarfeld (Beschreibung) des externen Issues geschrieben. <strong>Nicht gemappte externe Felder</strong> landen beim Pull als Markdown-Tabelle in der lokalen Beschreibung.</p>
+      <div style="display:flex; gap:0.5rem; margin:1rem 0;">
+        <button id="mapping-tab-gitlab-btn" class="view-tab active" type="button">GitLab</button>
+        <button id="mapping-tab-github-btn" class="view-tab" type="button">GitHub</button>
+      </div>
+      <div id="mapping-gitlab-block">
+        <table id="mapping-gitlab-table" style="margin-top:0.5rem;">
+          <thead>
+            <tr><th>Eigenes Feld</th><th>GitLab-Feld</th><th>Richtung</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem; align-items:flex-end; flex-wrap:wrap;">
+          <label>Eigenes Feld <select id="mapping-gitlab-pp-select"></select></label>
+          <label>GitLab-Feld <select id="mapping-gitlab-tracker-select"></select></label>
+          <label>Richtung
+            <select id="mapping-gitlab-direction">
+              <option value="both">Beide Richtungen</option>
+              <option value="push">Nur Push (pp → GitLab)</option>
+              <option value="pull">Nur Pull (GitLab → pp)</option>
+            </select>
+          </label>
+          <button type="button" id="mapping-gitlab-add-btn" class="btn-secondary btn-small">+ Zeile hinzufügen</button>
+        </div>
+        <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+          <button type="button" id="mapping-gitlab-save-btn">GitLab-Mapping speichern</button>
+          <button type="button" id="mapping-gitlab-reset-btn" class="btn-secondary">Auf Standard zurücksetzen</button>
+        </div>
+        <p id="mapping-gitlab-msg" style="margin-top:0.5rem; min-height:1.2em;"></p>
+      </div>
+      <div id="mapping-github-block" hidden>
+        <table id="mapping-github-table" style="margin-top:0.5rem;">
+          <thead>
+            <tr><th>Eigenes Feld</th><th>GitHub-Feld</th><th>Richtung</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div style="display:flex; gap:0.5rem; margin-top:0.75rem; align-items:flex-end; flex-wrap:wrap;">
+          <label>Eigenes Feld <select id="mapping-github-pp-select"></select></label>
+          <label>GitHub-Feld <select id="mapping-github-tracker-select"></select></label>
+          <label>Richtung
+            <select id="mapping-github-direction">
+              <option value="both">Beide Richtungen</option>
+              <option value="push">Nur Push (pp → GitHub)</option>
+              <option value="pull">Nur Pull (GitHub → pp)</option>
+            </select>
+          </label>
+          <button type="button" id="mapping-github-add-btn" class="btn-secondary btn-small">+ Zeile hinzufügen</button>
+        </div>
+        <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+          <button type="button" id="mapping-github-save-btn">GitHub-Mapping speichern</button>
+          <button type="button" id="mapping-github-reset-btn" class="btn-secondary">Auf Standard zurücksetzen</button>
+        </div>
+        <p id="mapping-github-msg" style="margin-top:0.5rem; min-height:1.2em;"></p>
+      </div>
+      </div><!-- /admin-tab-mapping -->
     </section>
 
     <section id="gitlab-projects-view" hidden>

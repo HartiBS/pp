@@ -38,20 +38,27 @@ const TYPE_LABELS = {
  * @param {object} opts - Optionen
  * @param {Array}  opts.customFieldDefs - Aktive Custom-Field-Definitionen des Projekts
  * @param {Array}  opts.subtasks - Subtasks des Tasks
+ * @param {Array}  opts.excludeFields - Eigene Felder (pp_field-Namen, z. B. 'status',
+ *                   'custom_field:3'), die bereits ueber das Tracker-Mapping in ein
+ *                   externes Feld geschrieben werden und deshalb NICHT zusaetzlich
+ *                   in den Markdown-Block aufgenommen werden sollen.
  * @returns {string} Markdown-String
  */
-function taskToMarkdown(task, { customFieldDefs = [], subtasks = [], parent = null, children = [], related = [] } = {}) {
-  const meta = {
-    pp: true,
-    status: task.status,
-    priority: task.priority || 'normal',
-    issue_type: task.issue_type || 'task',
-    labels: task.labels || [],
-    due_date: task.due_date || null,
-    estimated_hours: task.estimated_hours != null ? Number(task.estimated_hours) : null,
-    spent_hours: task.spent_hours != null ? Number(task.spent_hours) : null,
-    custom_fields: task.custom_fields || {},
-  };
+function taskToMarkdown(task, { customFieldDefs = [], subtasks = [], parent = null, children = [], related = [], excludeFields = [] } = {}) {
+  const excluded = new Set(excludeFields);
+  const meta = { pp: true };
+  if (!excluded.has('status')) meta.status = task.status;
+  if (!excluded.has('priority')) meta.priority = task.priority || 'normal';
+  if (!excluded.has('issue_type')) meta.issue_type = task.issue_type || 'task';
+  if (!excluded.has('labels')) meta.labels = task.labels || [];
+  if (!excluded.has('due_date')) meta.due_date = task.due_date || null;
+  if (!excluded.has('estimated_hours')) meta.estimated_hours = task.estimated_hours != null ? Number(task.estimated_hours) : null;
+  if (!excluded.has('spent_hours')) meta.spent_hours = task.spent_hours != null ? Number(task.spent_hours) : null;
+  const metaCustomFields = {};
+  for (const [k, v] of Object.entries(task.custom_fields || {})) {
+    if (!excluded.has(`custom_field:${k}`)) metaCustomFields[k] = v;
+  }
+  meta.custom_fields = metaCustomFields;
 
   // #74: Parent/Child-Relationen in Meta-Block aufnehmen
   if (parent) {
@@ -70,27 +77,31 @@ function taskToMarkdown(task, { customFieldDefs = [], subtasks = [], parent = nu
   lines.push(`${META_START}${JSON.stringify(meta)}${META_END}`);
   lines.push('');
 
-  // Menschenlesbarer Metadaten-Bereich
-  lines.push('---');
-  lines.push('');
-  lines.push(`**Typ:** ${TYPE_LABELS[meta.issue_type] || meta.issue_type}  `);
-  lines.push(`**Status:** ${STATUS_LABELS[meta.status] || meta.status}  `);
-  lines.push(`**Priorität:** ${PRIORITY_LABELS[meta.priority] || meta.priority}`);
-  if (meta.due_date) {
-    lines.push(`**Fällig:** ${meta.due_date}  `);
+  // Menschenlesbarer Metadaten-Bereich (nur Felder, die nicht extern gemappt sind)
+  const hasMetaLines = meta.issue_type || meta.status || meta.priority || meta.due_date ||
+    meta.estimated_hours != null || meta.spent_hours != null || (meta.labels && meta.labels.length > 0);
+  if (hasMetaLines) {
+    lines.push('---');
+    lines.push('');
+    if (meta.issue_type) lines.push(`**Typ:** ${TYPE_LABELS[meta.issue_type] || meta.issue_type}  `);
+    if (meta.status) lines.push(`**Status:** ${STATUS_LABELS[meta.status] || meta.status}  `);
+    if (meta.priority) lines.push(`**Priorität:** ${PRIORITY_LABELS[meta.priority] || meta.priority}`);
+    if (meta.due_date) {
+      lines.push(`**Fällig:** ${meta.due_date}  `);
+    }
+    if (meta.estimated_hours != null || meta.spent_hours != null) {
+      const parts = [];
+      if (meta.estimated_hours != null) parts.push(`Geschätzt: ${meta.estimated_hours}h`);
+      if (meta.spent_hours != null) parts.push(`Aufgewendet: ${meta.spent_hours}h`);
+      lines.push(`**Zeit:** ${parts.join(' · ')}  `);
+    }
+    if (meta.labels && meta.labels.length > 0) {
+      lines.push(`**Labels:** ${meta.labels.map(l => `\`${l}\``).join(' ')}`);
+    }
+    lines.push('');
+    lines.push('---');
+    lines.push('');
   }
-  if (meta.estimated_hours != null || meta.spent_hours != null) {
-    const parts = [];
-    if (meta.estimated_hours != null) parts.push(`Geschätzt: ${meta.estimated_hours}h`);
-    if (meta.spent_hours != null) parts.push(`Aufgewendet: ${meta.spent_hours}h`);
-    lines.push(`**Zeit:** ${parts.join(' · ')}  `);
-  }
-  if (meta.labels.length > 0) {
-    lines.push(`**Labels:** ${meta.labels.map(l => `\`${l}\``).join(' ')}`);
-  }
-  lines.push('');
-  lines.push('---');
-  lines.push('');
 
   // Beschreibung (Freitext)
   if (task.description) {
@@ -214,6 +225,7 @@ function escapeMd(str) {
 module.exports = {
   taskToMarkdown,
   markdownToTaskFields,
+  escapeMd,
   META_START,
   META_END,
 };
