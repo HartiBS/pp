@@ -176,6 +176,10 @@ Rechte: Erstellen/Bearbeiten/Kommentieren erfordert mindestens die projektbezoge
 - GitLab-Synchronisation: Beim Öffnen eines verknüpften Projekts werden GitLab-Issues automatisch synchronisiert (#56). Beim Anlegen eines Tasks kann „Auch in GitLab anlegen" gewählt werden; Änderungen an verknüpften Tasks (Titel, Beschreibung, Status `done` → GitLab `closed`) werden automatisch nach GitLab gepusht (#57). Fehler beim Push werden geloggt, blockieren aber nicht die lokale Speicherung.
 - SQL: ausschließlich parametrisierte Queries
 
+## Styleguide
+
+Alle Design-Tokens (Farben, Themes) und UI-Komponenten sind dokumentiert in [docs/STYLEGUIDE.md](docs/STYLEGUIDE.md). Layout-Änderungen werden über diesen Styleguide vorgegeben.
+
 ## Projektstruktur
 
 ```
