@@ -25,6 +25,16 @@ Alle Farben, Abstände und Schatten werden zentral in `:root` definiert
 | `--danger` | `#ef4444` | `#dc2626` | Fehler, Löschen |
 | `--input-bg` | `#0b1120` | `#f8fafc` | Eingabefelder |
 | `--shadow` | `rgba(0,0,0,0.3)` | `rgba(0,0,0,0.06)` | Kartenschatten |
+| `--success` | `#22c55e` | `#16a34a` | Erfolgsmeldungen (`.msg-success`) |
+
+### Badge-Farben (Priorität)
+
+| Priorität | Tokens | Klasse |
+|---|---|---|
+| `critical` (Kritisch) | `--badge-prio-critical-bg/-text` | `.badge-priority-critical` |
+| `high` (Hoch) | `--badge-prio-high-bg/-text` | `.badge-priority-high` |
+| `normal` (Mittel) | `--badge-prio-normal-bg/-text` | `.badge-priority-normal` |
+| `low` (Niedrig) | `--badge-prio-low-bg/-text` | `.badge-priority-low` |
 
 ### Badge-Farben (Status & Priorität)
 
@@ -37,7 +47,7 @@ Alle Farben, Abstände und Schatten werden zentral in `:root` definiert
 | `active` (Projekt) | `--badge-active-bg/-text` | `.badge-active` |
 | `planning` (Projekt) | `--badge-planning-bg/-text` | `.badge-planning` |
 
-Prioritäten: `.badge-priority-low/normal/high/critical`.
+Prioritäten: `.badge-priority-low/normal/high/critical` (Farben siehe Prioritäts-Tabelle oben; Mapping der deutschen Begriffe: Kritisch = `critical`, Hoch = `high`, Mittel = `normal`, Niedrig = `low`).
 
 ## 2. Typografie
 
@@ -93,13 +103,33 @@ Prioritäten: `.badge-priority-low/normal/high/critical`.
 ### Sonstiges
 
 - `.error`: Fehlermeldungen in `--danger`
+- `.msg-success`: Erfolgsmeldungen in `--success`
 - `.notif-dropdown` / `.notif-item`: Benachrichtigungs-Dropdown (`.unread` akzentuiert)
 - `#sync-indicator`: Sync-Statusanzeige
 - `.theme-toggle`: Dark/Light-Umschalter in der Topbar (Theme via `body.light` + `localStorage` `pp-theme`)
+
+### Issue-Erfassung / Formular-Pattern
+
+Verbindliche Klassen für GitHub-analoge Eingabeformulare mit projektbezogenen Zusatzfeldern (2-Spalten-Layout: Details links, Metadaten rechts):
+
+| Klasse | Verwendung |
+|---|---|
+| `.card-grid` | Grid-Container: 1 Spalte mobil, 3 Spalten ab 1024px; `.card-span-2` spannt 2 Spalten |
+| `.card` / `.card-header` / `.card-title` / `.card-content` | Karte mit Titelbereich und Inhalt (`gap: 1rem`) |
+| `.form-grid` | 2-spaltiges Grid für projektbezogene Pflichtfelder (1 Spalte unter 640px) |
+| `.field` + `label` | Feld mit kleinem Label (0.75rem, 500, `--text-muted`) |
+| `.separator` | Abschnitts-Trenner (`<hr>`) |
+| `.section-label` | Abschnitts-Überschrift (uppercase, tracking-wide) |
+| `.label-pill` / `.label-pill.selected` | Umschaltbare Label-Pills (ausgewählt: invertiert) |
+| `.assignee-row` + `.avatar` | Assignee-Zeile mit rundem Initial-Avatar (24px) |
+| `.issue-card` / `.issue-card-head` / `.issue-title` / `.issue-number` / `.issue-badges` | Issue-Karte in der Liste (Titel + `#{number}`, Badge-Reihe, rechts Status + Avatar) |
+| `.btn-block` | Button auf volle Breite (z. B. Submit unter der Metadaten-Spalte) |
+
+Prioritäts-Badges in Issue-Karten verwenden die Prioritäts-Tokens (Kritisch = `--badge-prio-critical-*`, Hoch = `--badge-prio-high-*`, Mittel = `--badge-prio-normal-*`, Niedrig = `--badge-prio-low-*`).
 
 ## 5. Regeln für Änderungen
 
 1. **Nie** harte Hex-Werte in Komponenten – immer Token aus `:root`.
 2. Neue Komponenten grundsätzlich mit bestehenden Klassen bauen; nur wenn nötig, neue Klasse in `style.css` ergänzen **und hier dokumentieren**.
 3. Dark und Light Theme müssen beide funktionieren (`body.light` überschreibt die Tokens).
-4. Design-Prototypen liegen als Klickdummys unter `public/design-vorschlaege/`.
+4. Design-Prototypen wurden nach Auswahl des Layouts aus `main` entfernt; verbindliche Vorgaben stehen in diesem Dokument.
