@@ -2701,51 +2701,60 @@ function bindProjectTrackerSettingsEvents() {
   });
 
   // Form submit (save)
-  // #105 Fix: Use document.addEventListener('submit') instead of bind('submit')
-  // because bind() sets el.onclick which does NOT work for 'submit' events on document
+  // #105 ULTIMATE FIX: Direct onsubmit on the form element (most reliable)
+  const apf = $('#admin-project-form');
+  if (apf) {
+    apf.onsubmit = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[admin-project-form] onsubmit fired');
+      const fd = new FormData(apf);
+      const id = fd.get('id');
+      const trackerType = fd.get('issue_tracker_type') || 'none';
+      const body = {
+        name: fd.get('name'),
+        description: fd.get('description') || null,
+        status: fd.get('status'),
+        owner_id: Number(fd.get('owner_id')),
+        issue_tracker_type: trackerType,
+        conn_base_url: fd.get('conn_base_url') || null,
+        conn_access_token: fd.get('conn_access_token') || null,
+        conn_service_account: fd.get('conn_service_account') || null,
+      };
+      if (trackerType === 'gitlab') {
+        const gid = fd.get('gitlab_project_id');
+        body.gitlab_project_id = gid ? Number(gid) : null;
+        body.github_repo = null;
+      } else if (trackerType === 'github') {
+        body.github_repo = fd.get('github_repo') || null;
+        body.gitlab_project_id = null;
+      } else {
+        body.gitlab_project_id = null;
+        body.github_repo = null;
+      }
+      console.log('[admin-project-form] sending PUT', id, JSON.stringify({trackerType, hasUrl: !!body.conn_base_url, hasToken: !!body.conn_access_token, repo: body.github_repo}));
+      const msgEl = $('#admin-project-conn-msg');
+      try {
+        const resp = await api(`/api/admin/projects/${id}`, { method: 'PUT', body });
+        console.log('[admin-project-form] saved OK:', JSON.stringify(resp).slice(0, 200));
+        if (msgEl) { msgEl.textContent = '✅ Gespeichert'; msgEl.style.color = 'var(--success, #4caf50)'; }
+        await loadAdminProjectConnectionSettings(id);
+        if (typeof loadAdminProjects === 'function') await loadAdminProjects();
+      } catch (err) {
+        console.error('[admin-project-form] save FAILED:', err.message);
+        if (msgEl) { msgEl.textContent = '❌ ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
+      }
+      return false;
+    };
+  }
+  // Backup: document-level capture listener
   document.addEventListener('submit', async (e) => {
     if (e.target.id !== 'admin-project-form') return;
+    // onsubmit already handled it
+    if (e.defaultPrevented) return;
     e.preventDefault();
-    e.stopPropagation();
-    const fd = new FormData(e.target);
-    const id = fd.get('id');
-    const trackerType = fd.get('issue_tracker_type') || 'none';
-    // #105: Alles in EINEM Request speichern (atomar)
-    const body = {
-      name: fd.get('name'),
-      description: fd.get('description') || null,
-      status: fd.get('status'),
-      owner_id: Number(fd.get('owner_id')),
-      issue_tracker_type: trackerType,
-      conn_base_url: fd.get('conn_base_url') || null,
-      conn_access_token: fd.get('conn_access_token') || null,
-      conn_service_account: fd.get('conn_service_account') || null,
-    };
-    if (trackerType === 'gitlab') {
-      const gid = fd.get('gitlab_project_id');
-      body.gitlab_project_id = gid ? Number(gid) : null;
-      body.github_repo = null;
-    } else if (trackerType === 'github') {
-      body.github_repo = fd.get('github_repo') || null;
-      body.gitlab_project_id = null;
-    } else {
-      body.gitlab_project_id = null;
-      body.github_repo = null;
-    }
-    const msgEl = $('#admin-project-conn-msg');
-    try {
-      const resp = await api(`/api/admin/projects/${id}`, { method: 'PUT', body });
-      console.log('[admin-project-form] saved:', resp);
-      if (msgEl) { msgEl.textContent = '✅ Gespeichert'; msgEl.style.color = 'var(--success, #4caf50)'; }
-      // Formular NICHT schließen, NICHT neu laden der View – nur Daten aktualisieren
-      await loadAdminProjectConnectionSettings(id);
-      // Tabelle aktualisieren ohne View-Wechsel
-      if (typeof loadAdminProjects === 'function') await loadAdminProjects();
-    } catch (err) {
-      console.error('[admin-project-form] save error:', err);
-      if (msgEl) { msgEl.textContent = '❌ ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
-    }
-  }, true); // capture phase – runs before any other submit handlers
+    console.log('[admin-project-form] document-level fallback fired');
+  }, true);
 
   // Delete (reset to global)
   bind('#delete-project-tracker-settings-btn', async () => {
