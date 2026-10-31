@@ -3,19 +3,20 @@ const taskMarkdown = require('./taskMarkdown');
 const taskRelations = require('./taskRelations');
 const { version } = require('../../package.json');
 /**
- * Parst und validiert eine URL streng.
- * Gibt nur { protocol, host } zurück – kein Pfad, keine Query, keine Credentials.
- * Erlaubt nur http/https und rejectiert Credentials im URL.
+ * Validiert eine Tracker base_url und gibt den Hostnamen zurück.
+ * Erlaubt nur https (http nur für lokale Entwicklung) und lehnt
+ * Credentials, Ports mit Sonderzeichen, Pfade und Query ab.
+ * Rückgabe: valider Hostname-String oder null.
  */
-function safeParseUrl(raw) {
+function validateTrackerHost(raw) {
   try {
     const u = new URL(raw);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname))) return null;
     if (u.username || u.password) return null;
-    if (!u.hostname) return null;
-    // Host darf keine Steuerzeichen/Whitespace enthalten
-    if (/[\s\u0000-\u001f]/.test(u.host)) return null;
-    return { protocol: u.protocol, host: u.host };
+    if (u.pathname !== '/' || u.search || u.hash) return null;
+    const host = u.hostname;
+    if (!host || /[^a-zA-Z0-9.\-\[\]:]/.test(host)) return null;
+    return host;
   } catch {
     return null;
   }
@@ -65,14 +66,14 @@ async function gitlabRequest(path, { method = 'GET', body, projectSettings } = {
     headers['X-GitLab-Username'] = settings.service_account_username;
   }
 
-  // SSRF-Schutz: base_url strikt validieren und nur validierte Komponenten verwenden
-  const parsed = safeParseUrl(settings.base_url);
-  if (!parsed) {
+  // SSRF-Schutz: nur validierter Hostname, festes https-Schema
+  const host = validateTrackerHost(settings.base_url);
+  if (!host) {
     const err = new Error('Ungültige GitLab base_url');
     err.status = 400;
     throw err;
   }
-  const apiUrl = parsed.protocol + '//' + parsed.host + '/api/v4' + path;
+  const apiUrl = 'https://' + host + '/api/v4' + path;
   const res = await fetch(apiUrl, {
     method,
     headers,
