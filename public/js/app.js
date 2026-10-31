@@ -2626,53 +2626,6 @@ async function deleteAdminProject(project) {
 
 function bindAdminProjectEvents() {
   // Form submit (edit)
-  bind('submit', async (e) => {
-    if (e.target.id === 'admin-project-form') {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const id = fd.get('id');
-      const trackerType = fd.get('issue_tracker_type') || 'none';
-      const body = {
-        name: fd.get('name'),
-        description: fd.get('description') || null,
-        status: fd.get('status'),
-        owner_id: Number(fd.get('owner_id')),
-        // #91/#96: Tracker-Typ + Ziel mit an Admin-Update senden
-        issue_tracker_type: trackerType,
-      };
-      if (trackerType === 'gitlab') {
-        const gid = fd.get('gitlab_project_id');
-        body.gitlab_project_id = gid ? Number(gid) : null;
-      } else if (trackerType === 'github') {
-        body.github_repo = fd.get('github_repo') || null;
-      } else {
-        body.gitlab_project_id = null;
-        body.github_repo = null;
-      }
-      try {
-        // 1. Projekt-Daten inkl. Tracker-Typ speichern
-        await api(`/api/admin/projects/${id}`, { method: 'PUT', body });
-        // 2. Verbindungsdaten separat speichern (falls Token eingegeben)
-        const connToken = fd.get('conn_access_token');
-        const connBaseUrl = fd.get('conn_base_url');
-        if (trackerType !== 'none' && connToken && connBaseUrl) {
-          await api(`/api/projects/${id}/tracker/settings`, {
-            method: 'PUT',
-            body: {
-              base_url: connBaseUrl,
-              access_token: connToken,
-              service_account_username: fd.get('conn_service_account') || null,
-            },
-          });
-        }
-        // Maske bleibt offen – Einstellungen werden direkt angezeigt
-        const msgEl = $('#admin-project-conn-msg');
-        if (msgEl) { msgEl.textContent = '✅ Gespeichert'; msgEl.style.color = 'var(--success, #4caf50)'; }
-        await loadAdminProjectConnectionSettings(id);
-        await loadAdminProjects();
-      } catch (err) { alert(err.message); }
-    }
-  });
 
   // Cancel button
   bind('#admin-project-cancel-btn', () => {
