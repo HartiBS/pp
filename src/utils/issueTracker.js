@@ -2,6 +2,9 @@ const db = require('../config/database');
 const gitlab = require('./gitlab');
 const github = require('./github');
 const taskMarkdown = require('./taskMarkdown');
+const trackerFieldMapping = require('./trackerFieldMapping');
+const customFields = require('./customFields');
+const taskRelations = require('./taskRelations');
 
 /**
  * Tracker-Abstraktion: Wählt je nach Projekttyp (gitlab/github/none)
@@ -148,15 +151,15 @@ function getEffectiveSettings(project) {
   return null; // null = globale Settings verwenden
 }
 
-async function createIssue(project, { title, description, labels }) {
+async function createIssue(project, payload) {
   const name = trackerName(project);
   const projectId = trackerProjectId(project);
   const opts = { projectSettings: getEffectiveSettings(project) };
   if (name === 'gitlab') {
-    return gitlab.createGitLabIssue(projectId, { title, description }, opts);
+    return gitlab.createGitLabIssue(projectId, payload, opts);
   }
   if (name === 'github') {
-    return github.createGitHubIssue(projectId, { title, description, labels }, opts);
+    return github.createGitHubIssue(projectId, payload, opts);
   }
   throw new Error('Kein Issue-Tracker für dieses Projekt konfiguriert');
 }
@@ -164,15 +167,15 @@ async function createIssue(project, { title, description, labels }) {
 /**
  * Aktualisiert ein Issue im externen Tracker.
  */
-async function updateIssue(project, externalId, { title, description, state_event }) {
+async function updateIssue(project, externalId, payload) {
   const name = trackerName(project);
   const projectId = trackerProjectId(project);
   const opts = { projectSettings: getEffectiveSettings(project) };
   if (name === 'gitlab') {
-    return gitlab.updateGitLabIssue(projectId, externalId, { title, description, state_event }, opts);
+    return gitlab.updateGitLabIssue(projectId, externalId, payload, opts);
   }
   if (name === 'github') {
-    return github.updateGitHubIssue(projectId, externalId, { title, description, state_event }, opts);
+    return github.updateGitHubIssue(projectId, externalId, payload, opts);
   }
   throw new Error('Kein Issue-Tracker für dieses Projekt konfiguriert');
 }
@@ -255,6 +258,136 @@ async function testConnection(trackerType) {
   throw new Error('Unbekannter Tracker-Typ');
 }
 
+/**
+ * Baut das Push-Payload für den externen Tracker aus einem Task gemäß dem
+ * konfigurierten Tracker-Feld-Mapping. Nicht gemappte eigene Felder (inkl.
+ * Custom Fields) landen als Markdown im Kommentarfeld (description/body).
+ */
+async function buildPushPayload(project, task, { customFieldDefs = [], subtasks = [], parent = null, children = [], related = [] } = {}) {
+  const type = trackerName(project);
+  const mappings = await trackerFieldMapping.getMappings(type);
+  let assigneeUsername = null;
+  if (task.assignee_id) {
+    const { rows } = await db.query('SELECT username FROM users WHERE id = $1', [task.assignee_id]);
+    if (rows.length > 0) assigneeUsername = rows[0].username;
+  }
+  let milestoneExternalId = null;
+  if (task.milestone_id) {
+    const { rows } = await db.query('SELECT gitlab_id FROM gitlab_milestones WHERE id = $1', [task.milestone_id]);
+    if (rows.length > 0) milestoneExternalId = rows[0].gitlab_id;
+  }
+  return trackerFieldMapping.buildTrackerPayload(type, task, mappings, {
+    customFieldDefs, subtasks, parent, children, related,
+    assigneeUsername, milestoneExternalId,
+  }).payload;
+}
+
+/**
+ * Wendet das konfigurierte Tracker-Feld-Mapping auf ein externes Issue an
+ * (Pull-Richtung) und aktualisiert den lokalen Task.
+ * Nicht gemappte externe Felder landen als Markdown-Tabelle in der Beschreibung.
+ */
+async function applyPullToTask(projectId, trackerType, issueRow) {
+  const taskResult = await db.query(
+    'SELECT id FROM tasks WHERE gitlab_iid = $1 AND project_id = $2',
+    [issueRow.gitlab_iid, projectId]
+  );
+  if (taskResult.rows.length === 0) return;
+  const taskId = taskResult.rows[0].id;
+
+  const mappings = await trackerFieldMapping.getMappings(trackerType);
+  const cfDefs = await customFields.getProjectFieldDefinitions(projectId);
+  const raw = issueRow.raw_data && typeof issueRow.raw_data === 'object'
+    ? issueRow.raw_data
+    : { title: issueRow.title, description: issueRow.description, state: issueRow.state };
+
+  const { fields, unmappedMarkdown } = trackerFieldMapping.applyPullMapping(trackerType, raw, mappings, {
+    customFieldDefs: cfDefs,
+  });
+
+  // Bearbeiter über users.username auflösen
+  let assigneeId = null;
+  const rawUser = trackerType === 'github'
+    ? ((raw.assignee && raw.assignee.login) || (Array.isArray(raw.assignees) && raw.assignees[0] && raw.assignees[0].login))
+    : ((raw.assignee && raw.assignee.username) || raw.assignee_username);
+  const wantsAssignee = mappings.some(m =>
+    (m.direction === 'pull' || m.direction === 'both') && m.pp_field === 'assignee' &&
+    ['assignee_username', 'assignees'].includes(m.tracker_field));
+  if (wantsAssignee && rawUser) {
+    const { rows: u } = await db.query('SELECT id FROM users WHERE username = $1 LIMIT 1', [rawUser]);
+    if (u.length > 0) assigneeId = u[0].id;
+  }
+
+  // Milestone: externe ID → lokale gitlab_milestones-Zeile
+  let milestoneId = null;
+  if (fields.milestone_external_id != null) {
+    const { rows: ms } = await db.query(
+      'SELECT id FROM gitlab_milestones WHERE project_id = $1 AND gitlab_id = $2 LIMIT 1',
+      [projectId, fields.milestone_external_id]
+    );
+    if (ms.length > 0) milestoneId = ms[0].id;
+  }
+
+  // Beschreibung: pp-meta aus der rohen Beschreibung entfernen + ungemappte Felder als Markdown
+  const parsed = taskMarkdown.markdownToTaskFields(fields.rawDescription || raw.description || '');
+  let description = parsed.description || null;
+  if (unmappedMarkdown) {
+    description = (description ? description + '\n' : '') + unmappedMarkdown;
+  }
+
+  // Status: gemappt ('closed' → done) oder Fallback über Issue-State
+  let newStatus = fields.status || null;
+  if (!newStatus) {
+    if (issueRow.state === 'closed' && parsed.meta && parsed.meta.status !== 'done') newStatus = 'done';
+    else if (issueRow.state === 'opened' && parsed.meta && parsed.meta.status === 'done') newStatus = 'in_progress';
+  }
+
+  // Custom Fields mit bestehenden mergen
+  let customFieldsValue = null;
+  if (fields.custom_fields && Object.keys(fields.custom_fields).length > 0) {
+    const { rows: t } = await db.query('SELECT custom_fields FROM tasks WHERE id = $1', [taskId]);
+    const existing = (t[0] && t[0].custom_fields) || {};
+    customFieldsValue = { ...existing, ...fields.custom_fields };
+  }
+
+  await db.query(
+    `UPDATE tasks
+     SET title = COALESCE($1, title),
+         description = COALESCE($2, description),
+         status = COALESCE($3, status),
+         priority = COALESCE($4, priority),
+         issue_type = COALESCE($5, issue_type),
+         labels = COALESCE($6, labels),
+         due_date = COALESCE($7, due_date),
+         estimated_hours = COALESCE($8, estimated_hours),
+         spent_hours = COALESCE($9, spent_hours),
+         assignee_id = COALESCE($10, assignee_id),
+         milestone_id = COALESCE($11, milestone_id),
+         custom_fields = COALESCE($12, custom_fields),
+         updated_at = NOW()
+     WHERE id = $13`,
+    [
+      fields.title || null,
+      description,
+      newStatus,
+      fields.priority || null,
+      fields.issue_type || null,
+      Array.isArray(fields.labels) ? fields.labels : null,
+      fields.due_date || null,
+      fields.estimated_hours != null ? fields.estimated_hours : null,
+      fields.spent_hours != null ? fields.spent_hours : null,
+      assigneeId,
+      milestoneId,
+      customFieldsValue,
+      taskId,
+    ]
+  );
+
+  if (parsed.meta) {
+    await taskRelations.restoreFromMeta(taskId, parsed.meta, projectId);
+  }
+}
+
 module.exports = {
   getProjectTracker,
   getEffectiveSettings,
@@ -271,4 +404,6 @@ module.exports = {
   saveProjectGitHubSettings,
   deleteProjectTrackerSettings,
   getProjectTrackerSettings,
+  applyPullToTask,
+  buildPushPayload,
 };

@@ -7,6 +7,7 @@ const gitlab = require('../utils/gitlab');
 const github = require('../utils/github');
 const roles = require('../utils/roles');
 const customFields = require('../utils/customFields');
+const trackerFieldMapping = require('../utils/trackerFieldMapping');
 
 const router = express.Router();
 
@@ -277,6 +278,42 @@ router.delete('/custom-fields/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// ===== Tracker-Feld-Mapping (GitHub/GitLab-Issue-Felder auf eigene Felder) =====
+
+router.get('/tracker-mappings', async (req, res) => {
+  try {
+    const [gitlabMappings, githubMappings, ppFields] = await Promise.all([
+      trackerFieldMapping.getMappings('gitlab'),
+      trackerFieldMapping.getMappings('github'),
+      trackerFieldMapping.getAvailablePpFields(),
+    ]);
+    res.json({
+      gitlab: { mappings: gitlabMappings, defaults: trackerFieldMapping.defaultMappings('gitlab') },
+      github: { mappings: githubMappings, defaults: trackerFieldMapping.defaultMappings('github') },
+      pp_fields: ppFields,
+      tracker_fields: trackerFieldMapping.TRACKER_FIELDS,
+      directions: trackerFieldMapping.DIRECTIONS,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.put('/tracker-mappings/:trackerType', async (req, res) => {
+  const { trackerType } = req.params;
+  if (!['gitlab', 'github'].includes(trackerType)) {
+    return res.status(400).json({ error: 'trackerType muss "gitlab" oder "github" sein' });
+  }
+  try {
+    const saved = await trackerFieldMapping.saveMappings(trackerType, req.body.mappings);
+    res.json({ tracker_type: trackerType, mappings: saved });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

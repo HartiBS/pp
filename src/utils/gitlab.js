@@ -1,6 +1,4 @@
 const db = require('../config/database');
-const taskMarkdown = require('./taskMarkdown');
-const taskRelations = require('./taskRelations');
 const { version } = require('../../package.json');
 /**
  * Validiert eine Tracker base_url und gibt den Hostnamen zurück.
@@ -124,15 +122,16 @@ async function syncProjectIssues(projectId, gitlabProjectId, options = {}) {
   for (const issue of issues) {
     const mapped = mapGitLabIssue(issue);
     await db.query(
-      `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at, raw_data)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
        ON CONFLICT (project_id, gitlab_iid) DO UPDATE
        SET title = EXCLUDED.title,
            description = EXCLUDED.description,
            state = EXCLUDED.state,
            web_url = EXCLUDED.web_url,
+           raw_data = EXCLUDED.raw_data,
            synced_at = NOW()`,
-      [projectId, mapped.gitlab_iid, mapped.title, mapped.description, mapped.state, mapped.web_url]
+      [projectId, mapped.gitlab_iid, mapped.title, mapped.description, mapped.state, mapped.web_url, JSON.stringify(issue)]
     );
   }
 
@@ -147,73 +146,43 @@ async function syncProjectIssues(projectId, gitlabProjectId, options = {}) {
     [projectId]
   );
 
-  // #72: GitLab-Issues mit pp-meta in lokale Tasks zurückführen (Pull-Richtung)
+  // #72 + Tracker-Mapping: GitLab-Issues in lokale Tasks zurückführen (Pull-Richtung).
+  // Gemappte externe Felder landen in den eigenen Feldern, nicht gemappte externe
+  // Felder als Markdown-Tabelle in der Beschreibung.
+  const issueTracker = require('./issueTracker');
   for (const issue of rows) {
-    const parsed = taskMarkdown.markdownToTaskFields(issue.description || '');
-    if (parsed.meta) {
-      // Task mit diesem gitlab_iid suchen und aktualisieren
-      const taskResult = await db.query(
-        'SELECT id FROM tasks WHERE gitlab_iid = $1 AND project_id = $2',
-        [issue.gitlab_iid, projectId]
-      );
-      if (taskResult.rows.length > 0) {
-        const taskId = taskResult.rows[0].id;
-        const m = parsed.meta;
-        // Status-Mapping: GitLab 'closed' -> 'done', 'opened' -> keep existing or 'todo'
-        let newStatus = null;
-        if (issue.state === 'closed' && m.status !== 'done') {
-          newStatus = 'done';
-        } else if (issue.state === 'opened' && m.status === 'done') {
-          newStatus = 'in_progress';
-        }
-        await db.query(
-          `UPDATE tasks
-           SET title = COALESCE($1, title),
-               description = $2,
-               status = COALESCE($3, status),
-               priority = COALESCE($4, priority),
-               issue_type = COALESCE($5, issue_type),
-               labels = COALESCE($6, labels),
-               due_date = COALESCE($7, due_date),
-               estimated_hours = COALESCE($8, estimated_hours),
-               custom_fields = COALESCE($9, custom_fields),
-               updated_at = NOW()
-           WHERE id = $10`,
-          [
-            issue.title || null,
-            parsed.description || null,
-            newStatus,
-            m.priority || null,
-            m.issue_type || null,
-            Array.isArray(m.labels) ? m.labels : null,
-            m.due_date || null,
-            m.estimated_hours != null ? m.estimated_hours : null,
-            m.custom_fields && Object.keys(m.custom_fields).length > 0 ? m.custom_fields : null,
-            taskId,
-          ]
-        );
-        // #74: Relationen aus dem Meta-Block wiederherstellen (Pull)
-        await taskRelations.restoreFromMeta(taskId, m, projectId);
-      }
-    }
+    await issueTracker.applyPullToTask(projectId, 'gitlab', issue);
   }
 
   return rows;
 }
 
-async function createGitLabIssue(gitlabProjectId, { title, description }, options = {}) {
+async function createGitLabIssue(gitlabProjectId, payload = {}, options = {}) {
+  const { title, description } = payload;
+  const body = { title, description };
+  if (payload.labels !== undefined) body.labels = payload.labels;
+  if (payload.due_date) body.due_date = payload.due_date;
+  if (payload.milestone_id != null) body.milestone_id = payload.milestone_id;
+  if (payload.time_estimate != null) body.time_estimate = payload.time_estimate;
+  if (payload.time_spent != null) body.time_spent = payload.time_spent;
   const issue = await gitlabRequest(
     `/projects/${encodeURIComponent(gitlabProjectId)}/issues`,
-    { method: 'POST', body: { title, description }, projectSettings: options.projectSettings }
+    { method: 'POST', body, projectSettings: options.projectSettings }
   );
   return mapGitLabIssue(issue);
 }
 
-async function updateGitLabIssue(gitlabProjectId, iid, { title, description, state_event }, options = {}) {
+async function updateGitLabIssue(gitlabProjectId, iid, payload = {}, options = {}) {
+  const { title, description, state_event } = payload;
   const body = {};
   if (title !== undefined) body.title = title;
   if (description !== undefined) body.description = description;
   if (state_event) body.state_event = state_event;
+  if (payload.labels !== undefined) body.labels = payload.labels;
+  if (payload.due_date !== undefined) body.due_date = payload.due_date || null;
+  if (payload.milestone_id !== undefined) body.milestone_id = payload.milestone_id || null;
+  if (payload.time_estimate !== undefined) body.time_estimate = payload.time_estimate;
+  if (payload.time_spent !== undefined) body.time_spent = payload.time_spent;
   const issue = await gitlabRequest(
     `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}`,
     { method: 'PUT', body, projectSettings: options.projectSettings }

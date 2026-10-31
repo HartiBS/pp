@@ -834,8 +834,9 @@ async function loadAdmin(defaultTab) {
   // #71: Load custom field definitions
   await loadCustomFieldDefinitions();
   // #89/#90: Tab auswählen
-  switchAdminTab(defaultTab === 'projects' ? 'projects' : 'users');
-  if (defaultTab === 'projects') await loadAdminProjects();
+  const tab = defaultTab === 'projects' ? 'projects' : defaultTab === 'mapping' ? 'mapping' : 'users';
+  switchAdminTab(tab);
+  if (tab === 'projects') await loadAdminProjects();
   show('admin-view');
 }
 
@@ -1109,19 +1110,30 @@ bind('#admin-projects-btn', () => {
   if (dd) dd.hidden = true;
   loadAdmin('projects');
 });
+bind('#admin-mapping-btn', () => {
+  const dd = $('#admin-dropdown');
+  if (dd) dd.hidden = true;
+  loadAdmin('mapping');
+});
 bind('#admin-tab-users-btn', () => switchAdminTab('users'));
 bind('#admin-tab-projects-btn', () => switchAdminTab('projects'));
+bind('#admin-tab-mapping-btn', () => switchAdminTab('mapping'));
 
 function switchAdminTab(tab) {
   const usersBtn = $('#admin-tab-users-btn');
   const projectsBtn = $('#admin-tab-projects-btn');
+  const mappingBtn = $('#admin-tab-mapping-btn');
   const usersDiv = $('#admin-tab-users');
   const projectsDiv = $('#admin-tab-projects');
+  const mappingDiv = $('#admin-tab-mapping');
   if (usersBtn) usersBtn.classList.toggle('active', tab === 'users');
   if (projectsBtn) projectsBtn.classList.toggle('active', tab === 'projects');
+  if (mappingBtn) mappingBtn.classList.toggle('active', tab === 'mapping');
   if (usersDiv) usersDiv.hidden = tab !== 'users';
   if (projectsDiv) projectsDiv.hidden = tab !== 'projects';
+  if (mappingDiv) mappingDiv.hidden = tab !== 'mapping';
   if (tab === 'projects') loadAdminProjects();
+  if (tab === 'mapping') loadTrackerMappings();
 }
 bind('#admin-back-btn', () => loadDashboard());
 
@@ -2056,6 +2068,167 @@ window.deleteCustomField = async function(id) {
     await loadCustomFieldDefinitions();
   } catch (err) { alert(err.message); }
 };
+
+/* ===== ADMIN: Tracker-Feld-Mapping (GitHub/GitLab) ===== */
+
+const MAPPING_STATE = { gitlab: [], github: [], ppFields: [], trackerFields: {}, directions: [] };
+let mappingSubTab = 'gitlab';
+
+async function loadTrackerMappings() {
+  try {
+    const data = await api('/api/admin/tracker-mappings');
+    MAPPING_STATE.gitlab = data.gitlab.mappings.map(m => ({ ...m }));
+    MAPPING_STATE.github = data.github.mappings.map(m => ({ ...m }));
+    MAPPING_STATE.defaults = { gitlab: data.gitlab.defaults, github: data.github.defaults };
+    MAPPING_STATE.ppFields = data.pp_fields;
+    MAPPING_STATE.trackerFields = data.tracker_fields;
+    MAPPING_STATE.directions = data.directions;
+    fillMappingSelects();
+    renderMappingTable('gitlab');
+    renderMappingTable('github');
+    switchMappingSubTab(mappingSubTab);
+  } catch (err) {
+    console.error('Tracker-Mappings laden fehlgeschlagen:', err.message);
+    alert('Tracker-Mappings konnten nicht geladen werden: ' + err.message);
+  }
+}
+
+function fillMappingSelects() {
+  for (const type of ['gitlab', 'github']) {
+    const ppSel = $(`#mapping-${type}-pp-select`);
+    const trSel = $(`#mapping-${type}-tracker-select`);
+    if (ppSel) {
+      ppSel.innerHTML = MAPPING_STATE.ppFields
+        .map(f => `<option value="${escapeHtml(f.value)}">${escapeHtml(f.label)}</option>`).join('');
+    }
+    if (trSel) {
+      trSel.innerHTML = (MAPPING_STATE.trackerFields[type] || [])
+        .map(f => `<option value="${escapeHtml(f.value)}">${escapeHtml(f.label)}</option>`).join('');
+    }
+  }
+}
+
+function ppFieldLabel(value) {
+  const f = MAPPING_STATE.ppFields.find(x => x.value === value);
+  return f ? f.label : value;
+}
+
+function trackerFieldLabel(type, value) {
+  const f = (MAPPING_STATE.trackerFields[type] || []).find(x => x.value === value);
+  return f ? f.label : value;
+}
+
+function directionLabel(d) {
+  return { both: 'Beide Richtungen', push: 'Nur Push', pull: 'Nur Pull' }[d] || d;
+}
+
+function renderMappingTable(type) {
+  const tbody = $(`#mapping-${type}-table tbody`);
+  if (!tbody) return;
+  const rows = MAPPING_STATE[type];
+  tbody.innerHTML = '';
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="4"><small style="color:var(--text-muted);">Noch keine Mappings — füge unten Zeilen hinzu oder setze auf Standard zurück.</small></td></tr>`;
+    return;
+  }
+  for (const [idx, m] of rows.entries()) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(ppFieldLabel(m.pp_field))}</td>
+      <td>
+        <select class="mapping-tracker-sel" data-type="${type}" data-idx="${idx}">
+          ${(MAPPING_STATE.trackerFields[type] || []).map(f =>
+            `<option value="${escapeHtml(f.value)}" ${f.value === m.tracker_field ? 'selected' : ''}>${escapeHtml(f.label)}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <select class="mapping-direction-sel" data-type="${type}" data-idx="${idx}">
+          ${(MAPPING_STATE.directions || ['both', 'push', 'pull']).map(d =>
+            `<option value="${d}" ${d === m.direction ? 'selected' : ''}>${directionLabel(d)}</option>`).join('')}
+        </select>
+      </td>
+      <td><button type="button" class="btn-small btn-secondary mapping-del-btn" data-type="${type}" data-idx="${idx}" style="color:var(--danger);">✕</button></td>`;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll('.mapping-tracker-sel').forEach(sel => {
+    sel.onchange = () => {
+      MAPPING_STATE[sel.dataset.type][Number(sel.dataset.idx)].tracker_field = sel.value;
+    };
+  });
+  tbody.querySelectorAll('.mapping-direction-sel').forEach(sel => {
+    sel.onchange = () => {
+      MAPPING_STATE[sel.dataset.type][Number(sel.dataset.idx)].direction = sel.value;
+    };
+  });
+  tbody.querySelectorAll('.mapping-del-btn').forEach(btn => {
+    btn.onclick = () => {
+      const type = btn.dataset.type;
+      MAPPING_STATE[type].splice(Number(btn.dataset.idx), 1);
+      renderMappingTable(type);
+    };
+  });
+}
+
+function switchMappingSubTab(type) {
+  mappingSubTab = type;
+  const glBtn = $('#mapping-tab-gitlab-btn');
+  const ghBtn = $('#mapping-tab-github-btn');
+  const glBlock = $('#mapping-gitlab-block');
+  const ghBlock = $('#mapping-github-block');
+  if (glBtn) glBtn.classList.toggle('active', type === 'gitlab');
+  if (ghBtn) ghBtn.classList.toggle('active', type === 'github');
+  if (glBlock) glBlock.hidden = type !== 'gitlab';
+  if (ghBlock) ghBlock.hidden = type !== 'github';
+}
+
+async function saveTrackerMappings(type) {
+  const msg = $(`#mapping-${type}-msg`);
+  try {
+    const mappings = MAPPING_STATE[type].map(m => ({
+      pp_field: m.pp_field, tracker_field: m.tracker_field, direction: m.direction,
+    }));
+    const { mappings: saved } = await api(`/api/admin/tracker-mappings/${type}`, {
+      method: 'PUT', body: { mappings },
+    });
+    MAPPING_STATE[type] = saved.map(m => ({ ...m }));
+    renderMappingTable(type);
+    if (msg) { msg.textContent = '✅ Gespeichert'; msg.style.color = 'var(--success, #4caf50)'; setTimeout(() => { msg.textContent = ''; }, 2500); }
+  } catch (err) {
+    if (msg) { msg.textContent = '❌ ' + err.message; msg.style.color = 'var(--danger, #f44336)'; }
+  }
+}
+
+bind('#mapping-tab-gitlab-btn', () => switchMappingSubTab('gitlab'));
+bind('#mapping-tab-github-btn', () => switchMappingSubTab('github'));
+bind('#mapping-gitlab-save-btn', () => saveTrackerMappings('gitlab'));
+bind('#mapping-github-save-btn', () => saveTrackerMappings('github'));
+bind('#mapping-gitlab-reset-btn', () => {
+  MAPPING_STATE.gitlab = (MAPPING_STATE.defaults.gitlab || []).map(m => ({ ...m }));
+  renderMappingTable('gitlab');
+});
+bind('#mapping-github-reset-btn', () => {
+  MAPPING_STATE.github = (MAPPING_STATE.defaults.github || []).map(m => ({ ...m }));
+  renderMappingTable('github');
+});
+bind('#mapping-gitlab-add-btn', () => addMappingRow('gitlab'));
+bind('#mapping-github-add-btn', () => addMappingRow('github'));
+
+function addMappingRow(type) {
+  const ppSel = $(`#mapping-${type}-pp-select`);
+  const trSel = $(`#mapping-${type}-tracker-select`);
+  const dirSel = $(`#mapping-${type}-direction`);
+  const ppField = ppSel ? ppSel.value : '';
+  const trackerField = trSel ? trSel.value : '';
+  const direction = dirSel ? dirSel.value : 'both';
+  if (!ppField || !trackerField) return;
+  if (MAPPING_STATE[type].some(m => m.pp_field === ppField)) {
+    const msg = $(`#mapping-${type}-msg`);
+    if (msg) { msg.textContent = '❌ Dieses eigene Feld ist bereits gemappt.'; msg.style.color = 'var(--danger, #f44336)'; }
+    return;
+  }
+  MAPPING_STATE[type].push({ pp_field: ppField, tracker_field: trackerField, direction });
+  renderMappingTable(type);
+}
 
 /* ===== PROJECT: Custom Fields Aktivierung ===== */
 
