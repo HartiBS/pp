@@ -432,45 +432,25 @@
 
       <div id="gitlab-block" style="margin-top:2rem;" hidden>
         <h3 id="tracker-block-title">Issue-Tracker</h3>
-        <form id="tracker-project-form" style="flex-direction:row; flex-wrap:wrap; align-items:center; gap:0.5rem;">
-          <label style="flex-direction:row; align-items:center; gap:0.5rem;">Tracker
-            <select name="issue_tracker_type" id="tracker-type-select">
-              <option value="none">Keiner</option>
-              <option value="gitlab">GitLab</option>
-              <option value="github">GitHub</option>
-            </select>
-          </label>
-          <label id="gitlab-id-label" style="flex-direction:row; align-items:center; gap:0.5rem;" hidden>GitLab-Projekt-ID
-            <input type="number" name="gitlab_project_id" id="gitlab-project-id-input" placeholder="z. B. 42" style="width:120px;">
-          </label>
-          <label id="github-repo-label" style="flex-direction:row; align-items:center; gap:0.5rem;" hidden>GitHub-Repo
-            <input type="text" name="github_repo" id="github-repo-input" placeholder="owner/repo" style="width:180px;">
-          </label>
-          <label style="flex-direction:row; align-items:center; gap:0.5rem; font-size:0.875rem; color:var(--text-muted);" title="Beim Speichern von Tasks automatisch in den konfigurierten Tracker synchronisieren">
-            <input type="checkbox" name="auto_sync" id="project-auto-sync-cb" checked> Auto-Sync bei Task-Speichern
-          </label>
-          <button type="submit">Speichern</button>
-          <button type="button" id="pick-tracker-project-btn" class="btn-secondary" hidden>Repository suchen</button>
+        <div id="tracker-link-row" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+          <span id="tracker-repo-link-label" style="color:var(--text-muted); font-size:0.875rem;">Repository:</span>
+          <a id="tracker-repo-link" href="#" target="_blank" rel="noopener" style="color:var(--accent, #4a9eff);"></a>
           <button type="button" id="sync-tracker-btn" class="btn-secondary" hidden>Synchronisieren</button>
-        </form>
-        <div id="tracker-search-results" hidden style="margin-top:0.5rem; max-height:200px; overflow-y:auto; border:1px solid var(--border); border-radius:6px;">
-          <ul id="tracker-search-list" class="dash-list"></ul>
         </div>
         <div id="project-tracker-settings-block" hidden style="margin-top:1rem;">
-          <h4>Eigene Verbindung für dieses Projekt</h4>
-          <p style="color:var(--text-muted); font-size:0.8rem;">Überschreibt die globalen Einstellungen nur für dieses Projekt.</p>
+          <h4>Verbindung für dieses Projekt</h4>
           <form id="project-tracker-settings-form">
             <label>API-URL <input type="url" name="base_url" placeholder="https://..." required></label>
             <label>Access Token <input type="password" name="access_token" required></label>
             <label>Service-Account (optional) <input type="text" name="service_account_username"></label>
             <div style="display:flex; gap:0.5rem;">
               <button type="submit">Speichern</button>
-              <button type="button" id="delete-project-tracker-settings-btn" class="btn-secondary">Auf global zurücksetzen</button>
+              <button type="button" id="delete-project-tracker-settings-btn" class="btn-secondary">Verbindung entfernen</button>
             </div>
           </form>
           <p id="project-tracker-settings-msg"></p>
         </div>
-        <button type="button" id="toggle-project-tracker-settings-btn" class="btn-small btn-secondary">⚙ Eigene Verbindung</button>
+        <button type="button" id="toggle-project-tracker-settings-btn" class="btn-small btn-secondary">⚙ Verbindung bearbeiten</button>
         <div id="milestone-block" style="margin-top:1rem;" hidden>
           <h4>Meilensteine <button type="button" id="sync-milestones-btn" class="btn-secondary">Synchronisieren</button></h4>
           <ul id="milestone-list" class="dash-list"></ul>
@@ -680,6 +660,6 @@
     </section>
   </main>
 
-  <script src="/js/app.js?v=15"></script>
+  <script src="/js/app.js?v=16"></script>
 </body>
 </html>

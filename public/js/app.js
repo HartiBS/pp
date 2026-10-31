@@ -2397,59 +2397,48 @@ async function loadProjectTracker(projectId) {
 }
 
 function renderTrackerForm(tracker) {
-  const typeSelect = $('#tracker-type-select');
-  typeSelect.value = tracker.type || 'none';
-  updateTrackerFormVisibility(tracker.type || 'none');
-  const autoCb = $('#project-auto-sync-cb');
-  if (autoCb && state.currentProject) autoCb.checked = state.currentProject.auto_sync !== false;
+  // #106: Nur noch Link + Sync-Button anzeigen (kein Formular mehr in der Projektansicht)
+  const type = tracker.type || 'none';
+  const linkEl = $('#tracker-repo-link');
+  const syncBtn = $('#sync-tracker-btn');
+  const titleEl = $('#tracker-block-title');
+  const toggleBtn = $('#toggle-project-tracker-settings-btn');
 
-  if (tracker.type === 'gitlab') {
-    $('#gitlab-project-id-input').value = tracker.gitlab_project_id || '';
-  } else if (tracker.type === 'github') {
-    $('#github-repo-input').value = tracker.github_repo || '';
+  titleEl.textContent = type === 'github' ? 'GitHub' : type === 'gitlab' ? 'GitLab' : 'Issue-Tracker';
+
+  if (type === 'github' && tracker.github_repo) {
+    // GitHub repo link
+    const baseUrl = (state.currentTrackerSettings && state.currentTrackerSettings.base_url) || 'https://github.com';
+    linkEl.href = baseUrl.replace(/\/+$/, '') + '/' + tracker.github_repo;
+    linkEl.textContent = tracker.github_repo;
+    linkEl.style.display = '';
+  } else if (type === 'gitlab' && tracker.gitlab_project_id) {
+    // GitLab project link (base_url aus settings wenn vorhanden)
+    const baseUrl = (state.currentTrackerSettings && state.currentTrackerSettings.base_url) || '';
+    if (baseUrl) {
+      linkEl.href = baseUrl.replace(/\/+$/, '') + '/-/projects/' + tracker.gitlab_project_id;
+    } else {
+      linkEl.href = '#';
+    }
+    linkEl.textContent = 'GitLab-Projekt #' + tracker.gitlab_project_id;
+    linkEl.style.display = '';
+  } else {
+    linkEl.textContent = '(kein Repository verknüpft – in Admin → Projektverwaltung einstellen)';
+    linkEl.removeAttribute('href');
+    linkEl.style.display = '';
   }
 
-  // Show/hide sync button + search button
   const canEdit = state.currentProject && ['admin', 'projektmanager'].includes(state.currentProject.my_role);
-  $('#sync-tracker-btn').hidden = !tracker.configured;
-  $('#pick-tracker-project-btn').hidden = !tracker.type || tracker.type === 'none' || !canEdit;
-  $('#tracker-block-title').textContent = tracker.type === 'github' ? 'GitHub-Issues' : tracker.type === 'gitlab' ? 'GitLab-Issues' : 'Issue-Tracker';
+  if (syncBtn) syncBtn.hidden = !tracker.configured;
+  if (toggleBtn) toggleBtn.hidden = !canEdit || type === 'none';
 }
 
-function updateTrackerFormVisibility(type) {
-  $('#gitlab-id-label').hidden = type !== 'gitlab';
-  $('#github-repo-label').hidden = type !== 'github';
-  $('#sync-tracker-btn').hidden = type === 'none';
-  $('#pick-tracker-project-btn').hidden = type === 'none';
-}
+// #106: updateTrackerFormVisibility entfernt – Projektansicht zeigt nur Link + Sync
 
 function bindTrackerEvents() {
-  bind('#tracker-type-select', 'change', (e) => {
-    updateTrackerFormVisibility(e.target.value);
-  });
+  // #106: Tracker-Auswahl nur noch in Admin-Projektverwaltung
 
-  bind('submit', async (e) => {
-    if (e.target.id === 'tracker-project-form') {
-      e.preventDefault();
-      if (!state.currentProject) return;
-      const fd = new FormData(e.target);
-      const type = fd.get('issue_tracker_type');
-      const body = { issue_tracker_type: type, auto_sync: fd.get('auto_sync') === 'on' };
-      if (type === 'gitlab') {
-        const gid = fd.get('gitlab_project_id');
-        body.gitlab_project_id = gid ? Number(gid) : null;
-      } else if (type === 'github') {
-        body.github_repo = fd.get('github_repo') || null;
-      } else {
-        body.gitlab_project_id = null;
-        body.github_repo = null;
-      }
-      try {
-        await api(`/api/projects/${state.currentProject.id}`, { method: 'PUT', body });
-        await loadProject(state.currentProject.id);
-      } catch (err) { alert(err.message); }
-    }
-  });
+  // #106: tracker-project-form submit entfernt (nur noch Link-Anzeige)
 
   bind('#sync-tracker-btn', async () => {
     if (!state.currentProject) return;
@@ -2460,15 +2449,7 @@ function bindTrackerEvents() {
     } catch (err) { alert(err.message); }
   });
 
-  bind('#pick-tracker-project-btn', async () => {
-    if (!state.currentProject) return;
-    const type = $('#tracker-type-select').value;
-    if (type === 'none') return;
-    try {
-      const { projects, type: t } = await api(`/api/projects/${state.currentProject.id}/tracker/search?q=`);
-      renderTrackerSearchResults(projects, t);
-    } catch (err) { alert(err.message); }
-  });
+  // #106: pick-tracker-project-btn entfernt – Repository-Auswahl nur noch in Admin-Projektverwaltung
 }
 
 function renderTrackerSearchResults(projects, type) {
@@ -2681,12 +2662,16 @@ function bindProjectTrackerSettingsEvents() {
       const fd = new FormData(e.target);
       const id = fd.get('id');
       const trackerType = fd.get('issue_tracker_type') || 'none';
+      // #105: Alles in EINEM Request speichern (atomar)
       const body = {
         name: fd.get('name'),
         description: fd.get('description') || null,
         status: fd.get('status'),
         owner_id: Number(fd.get('owner_id')),
         issue_tracker_type: trackerType,
+        conn_base_url: fd.get('conn_base_url') || null,
+        conn_access_token: fd.get('conn_access_token') || null,
+        conn_service_account: fd.get('conn_service_account') || null,
       };
       if (trackerType === 'gitlab') {
         const gid = fd.get('gitlab_project_id');
@@ -2699,34 +2684,13 @@ function bindProjectTrackerSettingsEvents() {
         body.gitlab_project_id = null;
         body.github_repo = null;
       }
-      // Verbindungsdaten immer mitsenden (auch leer = löschen)
-      const connToken = fd.get('conn_access_token');
-      const connBaseUrl = fd.get('conn_base_url');
-      const connSa = fd.get('conn_service_account') || null;
+      const msgEl = $('#admin-project-conn-msg');
       try {
-        // 1. Projekt-Daten inkl. Tracker-Typ speichern
         await api(`/api/admin/projects/${id}`, { method: 'PUT', body });
-        // 2. Verbindungsdaten immer speichern (auch wenn Token leer -> alte löschen)
-        if (trackerType !== 'none' && connBaseUrl) {
-          await api(`/api/admin/projects/${id}/tracker/settings`, {
-            method: 'PUT',
-            body: {
-              base_url: connBaseUrl,
-              access_token: connToken || '',
-              service_account_username: connSa,
-            },
-          });
-        } else if (trackerType === 'none') {
-          // Tracker deaktiviert -> projekt-spezifische Settings löschen
-          try { await api(`/api/admin/projects/${id}/tracker/settings`, { method: 'DELETE' }); } catch (e) {}
-        }
-        // Maske bleibt offen – Einstellungen werden direkt neu geladen
-        const msgEl = $('#admin-project-conn-msg');
         if (msgEl) { msgEl.textContent = '✅ Gespeichert'; msgEl.style.color = 'var(--success, #4caf50)'; }
         await loadAdminProjectConnectionSettings(id);
         await loadAdminProjects();
       } catch (err) {
-        const msgEl = $('#admin-project-conn-msg');
         if (msgEl) { msgEl.textContent = '❌ ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
       }
     }

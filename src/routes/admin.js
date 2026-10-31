@@ -302,7 +302,8 @@ router.get('/projects', async (req, res) => {
 });
 
 router.put('/projects/:id', async (req, res) => {
-  const { name, description, status, owner_id, issue_tracker_type, gitlab_project_id, github_repo } = req.body;
+  const { name, description, status, owner_id, issue_tracker_type, gitlab_project_id, github_repo,
+          conn_base_url, conn_access_token, conn_service_account } = req.body;
   try {
     // Validate status
     if (status !== undefined && !['active', 'paused', 'done', 'archived'].includes(status)) {
@@ -345,6 +346,26 @@ router.put('/projects/:id', async (req, res) => {
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    }
+    // #105: Tracker-Verbindungsdaten im selben Request speichern
+    const savedType = issue_tracker_type !== undefined ? issue_tracker_type : rows[0].issue_tracker_type;
+    if (savedType === 'gitlab' || savedType === 'github') {
+      if (conn_base_url && conn_access_token) {
+        if (savedType === 'gitlab') {
+          await issueTracker.saveProjectGitLabSettings(req.params.id, {
+            base_url: conn_base_url, access_token: conn_access_token,
+            service_account_username: conn_service_account || null,
+          });
+        } else {
+          await issueTracker.saveProjectGitHubSettings(req.params.id, {
+            base_url: conn_base_url, access_token: conn_access_token,
+            service_account_username: conn_service_account || null,
+          });
+        }
+      }
+    } else if (savedType === 'none') {
+      await issueTracker.deleteProjectTrackerSettings(req.params.id, 'gitlab');
+      await issueTracker.deleteProjectTrackerSettings(req.params.id, 'github');
     }
     res.json({ project: rows[0] });
   } catch (err) {
