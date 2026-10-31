@@ -4,6 +4,8 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { loadProjectRole, requireProjectPermission } = require('../utils/permissions');
 const gitlab = require('../utils/gitlab');
 const notifications = require('../utils/notifications');
+const trackerFieldMapping = require('../utils/trackerFieldMapping');
+const customFields = require('../utils/customFields');
 
 const router = express.Router();
 
@@ -229,6 +231,53 @@ router.get('/projects/:id/issues/:iid/comments', loadProjectRole, requireProject
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// Liefert die Felder, die in der GitLab-Issue-Ansicht angezeigt werden:
+// alle pp-Felder, die im Tracker-Mapping (Pull-Richtung) auf ein GitLab-Feld
+// gemappt sind, plus alle Custom Fields, die der Projektmanager f\u00fcr das
+// Projekt aktiviert hat.
+router.get('/projects/:id/issues/:iid/fields', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      'SELECT * FROM gitlab_issues WHERE project_id = $1 AND gitlab_iid = $2',
+      [req.params.id, req.params.iid]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Issue nicht gefunden' });
+    }
+    const mappings = await trackerFieldMapping.getMappings('gitlab');
+    const pull = mappings.filter(m => m.direction === 'pull' || m.direction === 'both');
+    const projectDefs = await customFields.getProjectFieldDefinitions(req.params.id);
+    const mappedCustomIds = new Set(
+      pull
+        .filter(m => m.pp_field.startsWith(trackerFieldMapping.CUSTOM_FIELD_PREFIX))
+        .map(m => m.pp_field.slice(trackerFieldMapping.CUSTOM_FIELD_PREFIX.length))
+    );
+    const fields = pull
+      .filter(m => !m.pp_field.startsWith(trackerFieldMapping.CUSTOM_FIELD_PREFIX))
+      .map(m => ({
+        pp_field: m.pp_field,
+        tracker_field: m.tracker_field,
+        label: (trackerFieldMapping.PP_FIELDS.find(f => f.value === m.pp_field) || {}).label || m.pp_field,
+        kind: 'pp',
+      }));
+    for (const def of projectDefs) {
+      const id = String(def.id);
+      fields.push({
+        pp_field: `${trackerFieldMapping.CUSTOM_FIELD_PREFIX}${id}`,
+        label: def.name,
+        kind: 'custom_field',
+        field_type: def.field_type,
+        options: def.options || [],
+        is_mapped: mappedCustomIds.has(id),
+      });
+    }
+    res.json({ fields, raw: rows[0].raw_data || null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
   }
 });
 

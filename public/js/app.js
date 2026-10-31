@@ -766,6 +766,145 @@ async function loadGitLabSettings() {
   }
 }
 
+const GI_PP_LABELS = {
+  title: 'Titel',
+  description: 'Beschreibung',
+  status: 'Status',
+  priority: 'Priorität',
+  issue_type: 'Typ',
+  labels: 'Labels',
+  due_date: 'Fälligkeitsdatum',
+  estimated_hours: 'Geschätzte Stunden',
+  spent_hours: 'Aufgewendete Stunden',
+  assignee: 'Bearbeiter',
+  milestone: 'Milestone',
+};
+
+const GI_STATUS_LABELS = { opened: 'offen', closed: 'geschlossen' };
+
+function giRawValue(raw, trackerField) {
+  if (!raw || typeof raw !== 'object') return null;
+  switch (trackerField) {
+    case 'title': return raw.title;
+    case 'description': return raw.description;
+    case 'state': return raw.state;
+    case 'labels': return Array.isArray(raw.labels)
+      ? raw.labels.map(l => (typeof l === 'string' ? l : l && l.name)).filter(Boolean)
+      : null;
+    case 'milestone': return raw.milestone && raw.milestone.title ? raw.milestone.title : null;
+    case 'due_date': return raw.due_date;
+    case 'assignee_username': return raw.assignee && raw.assignee.username ? raw.assignee.username : null;
+    case 'time_estimate': return raw.time_estimate != null ? Number(raw.time_estimate) / 3600 : null;
+    case 'time_spent': return raw.time_spent != null ? Number(raw.time_spent) / 3600 : null;
+    default: return raw[trackerField] != null ? raw[trackerField] : null;
+  }
+}
+
+function giFormatValue(field, value) {
+  if (value === null || value === undefined || value === '') return '–';
+  if (field.pp_field === 'status') return GI_STATUS_LABELS[value] || value;
+  if (field.pp_field === 'priority') return (PRIORITY_LABELS[value] || value);
+  if (field.pp_field === 'issue_type') return (ISSUE_TYPE_LABELS[value] || value);
+  if (field.pp_field === 'due_date') return new Date(value).toLocaleDateString('de-DE');
+  if (Array.isArray(value)) return value.join(', ');
+  return String(value);
+}
+
+function giCustomValue(def, raw, mappedTrackerField) {
+  const labels = Array.isArray(raw && raw.labels)
+    ? raw.labels.map(l => (typeof l === 'string' ? l : l && l.name)).filter(Boolean)
+    : [];
+  if (mappedTrackerField === 'labels') {
+    const prefix = `${def.name}: `;
+    const hit = labels.find(l => l.startsWith(prefix));
+    if (!hit) return null;
+    const rawVal = hit.slice(prefix.length);
+    if (def.field_type === 'checkbox') return rawVal === 'true' || rawVal === '1' || rawVal === 'Ja' || rawVal === '✅';
+    if (def.field_type === 'number') { const n = Number(rawVal); return isNaN(n) ? rawVal : n; }
+    return rawVal;
+  }
+  return raw ? raw[`custom_${def.id}`] ?? null : null;
+}
+
+function giFormatCustomValue(def, value) {
+  if (value === null || value === undefined || value === '') return '–';
+  if (def.field_type === 'checkbox') return value ? 'Ja' : 'Nein';
+  if (def.field_type === 'date') return new Date(value).toLocaleDateString('de-DE');
+  return String(value);
+}
+
+function renderGitLabIssueMeta(fields, raw) {
+  const grid = $('#gi-field-grid');
+  grid.innerHTML = '';
+  for (const field of fields || []) {
+    if (field.kind === 'custom_field') continue;
+    const value = giRawValue(raw, field.tracker_field);
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const label = document.createElement('label');
+    label.textContent = GI_PP_LABELS[field.pp_field] || field.label || field.pp_field;
+    const val = document.createElement('span');
+    val.style.fontSize = '0.875rem';
+    val.textContent = giFormatValue(field, value);
+    wrap.appendChild(label);
+    wrap.appendChild(val);
+    grid.appendChild(wrap);
+  }
+
+  const pillBox = $('#gi-label-pills');
+  pillBox.innerHTML = '';
+  const labels = Array.isArray(raw && raw.labels)
+    ? raw.labels.map(l => (typeof l === 'string' ? l : l && l.name)).filter(Boolean)
+    : [];
+  if (!labels.length) {
+    pillBox.innerHTML = '<small style="color:var(--text-muted);">Keine Labels</small>';
+  }
+  for (const l of labels) {
+    const pill = document.createElement('span');
+    pill.className = 'label-pill selected';
+    pill.textContent = l;
+    pillBox.appendChild(pill);
+  }
+
+  const assigneeRow = $('#gi-assignee-row');
+  assigneeRow.innerHTML = '';
+  const assignee = raw && raw.assignee;
+  if (assignee && (assignee.username || assignee.name)) {
+    const row = document.createElement('div');
+    row.className = 'assignee-row';
+    const avatar = document.createElement('span');
+    avatar.className = 'avatar';
+    avatar.textContent = avatarInitials(assignee.name || assignee.username);
+    const name = document.createElement('span');
+    name.textContent = assignee.name ? `${assignee.name} (@${assignee.username})` : `@${assignee.username}`;
+    row.appendChild(avatar);
+    row.appendChild(name);
+    assigneeRow.appendChild(row);
+  } else {
+    assigneeRow.innerHTML = '<small style="color:var(--text-muted);">Nicht zugewiesen</small>';
+  }
+
+  const cfBox = $('#gi-custom-fields');
+  cfBox.innerHTML = '';
+  const customFields = (fields || []).filter(f => f.kind === 'custom_field');
+  if (!customFields.length) {
+    cfBox.innerHTML = '<small style="color:var(--text-muted);">Keine Zusatzfelder für dieses Projekt aktiviert</small>';
+  }
+  for (const def of customFields) {
+    const value = giCustomValue(def, raw, def.is_mapped ? 'labels' : null);
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const label = document.createElement('label');
+    label.textContent = def.label + (def.is_mapped ? '' : ' (nicht gemappt)');
+    const val = document.createElement('span');
+    val.style.fontSize = '0.875rem';
+    val.textContent = giFormatCustomValue(def, value);
+    wrap.appendChild(label);
+    wrap.appendChild(val);
+    cfBox.appendChild(wrap);
+  }
+}
+
 async function loadGitLabIssue(issue) {
   state.currentGitLabIssue = issue;
   $('#gi-edit-form').hidden = true;
@@ -778,9 +917,19 @@ async function loadGitLabIssue(issue) {
   $('#gi-close-btn').hidden = issue.state !== 'opened';
   $('#gi-reopen-btn').hidden = issue.state !== 'closed';
   $('#gi-web-link').href = issue.web_url || '#';
+  $('#gi-field-grid').innerHTML = '<small style="color:var(--text-muted);">Lade Felder...</small>';
+  $('#gi-label-pills').innerHTML = '';
+  $('#gi-assignee-row').innerHTML = '';
+  $('#gi-custom-fields').innerHTML = '';
   const commentList = $('#gi-comment-list');
   commentList.innerHTML = '<li><small>Lade Kommentare...</small></li>';
   show('gitlab-issue-view');
+  try {
+    const { fields, raw } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}/fields`);
+    renderGitLabIssueMeta(fields, raw);
+  } catch (err) {
+    $('#gi-field-grid').innerHTML = `<small class="error">Felder konnten nicht geladen werden: ${err.message}</small>`;
+  }
   try {
     const { comments } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}/comments`);
     commentList.innerHTML = '';

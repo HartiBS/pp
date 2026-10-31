@@ -127,6 +127,10 @@ Verbindliche Klassen für GitHub-analoge Eingabeformulare mit projektbezogenen Z
 
 Prioritäts-Badges in Issue-Karten verwenden die Prioritäts-Tokens (Kritisch = `--badge-prio-critical-*`, Hoch = `--badge-prio-high-*`, Mittel = `--badge-prio-normal-*`, Niedrig = `--badge-prio-low-*`).
 
+### Issue-Detail-Ansicht (Tracker-Issue, z. B. GitLab)
+
+Die Detailansicht eines externen Issues (`#gitlab-issue-view`) folgt demselben Card-Layout: `.card-grid` mit einer `.card.card-span-2` (Titel + Beschreibung + Feld-Grid) links und einer `.card` (Metadaten: Labels als `.label-pill.selected`, Bearbeiter als `.assignee-row` + `.avatar`, Custom Fields, Aktions-Buttons als `.btn-block`) rechts. Die angezeigten Felder kommen aus dem Tracker-Mapping (Pull-Richtung) plus den für das Projekt aktivierten Custom Fields und werden per `.form-grid` bzw. `.field` gerendert.
+
 ## 5. Regeln für Änderungen
 
 1. **Nie** harte Hex-Werte in Komponenten – immer Token aus `:root`.

@@ -545,20 +545,42 @@
 
     <section id="gitlab-issue-view" hidden>
       <button id="gitlab-issue-back-btn">← Zurück zum Projekt</button>
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem;">
-        <div>
-          <h2 id="gi-title"></h2>
-          <p id="gi-description"></p>
+      <div class="card-grid" style="margin-top:1rem;">
+        <div class="card card-span-2">
+          <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem;">
+            <span class="card-title" id="gi-title"></span>
+            <span id="gi-state" class="badge"></span>
+          </div>
+          <div class="card-content">
+            <p id="gi-description" style="margin:0; white-space:pre-wrap;"></p>
+            <hr class="separator">
+            <span class="section-label">Felder</span>
+            <div class="form-grid" id="gi-field-grid"></div>
+          </div>
         </div>
-        <span id="gi-state" class="badge"></span>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Metadaten</span></div>
+          <div class="card-content">
+            <div class="field">
+              <label>Labels</label>
+              <div id="gi-label-pills" style="display:flex; flex-wrap:wrap; gap:0.375rem;"></div>
+            </div>
+            <div class="field">
+              <label>Bearbeiter</label>
+              <div id="gi-assignee-row"></div>
+            </div>
+            <hr class="separator">
+            <span class="section-label">Zusatzfelder</span>
+            <div id="gi-custom-fields" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
+            <hr class="separator">
+            <button id="gi-close-btn" class="btn-block">Schließen</button>
+            <button id="gi-reopen-btn" class="btn-secondary btn-block" hidden>Wiedereröffnen</button>
+            <button id="gi-edit-btn" class="btn-secondary btn-block">Bearbeiten</button>
+            <a id="gi-web-link" href="#" target="_blank" rel="noopener" style="text-align:center; font-size:0.875rem;">In GitLab öffnen ↗</a>
+          </div>
+        </div>
       </div>
-      <div style="display:flex; gap:0.75rem; margin-bottom:1.5rem;">
-        <button id="gi-close-btn">Schließen</button>
-        <button id="gi-reopen-btn" class="btn-secondary" hidden>Wiedereröffnen</button>
-        <button id="gi-edit-btn" class="btn-secondary">Bearbeiten</button>
-        <a id="gi-web-link" href="#" target="_blank" rel="noopener" style="align-self:center;">In GitLab öffnen ↗</a>
-      </div>
-      <form id="gi-edit-form" hidden>
+      <form id="gi-edit-form" hidden style="margin-top:1rem;">
         <label>Titel <input type="text" name="title" required></label>
         <label>Beschreibung <textarea name="description"></textarea></label>
         <div style="display:flex; gap:0.75rem;">
@@ -566,7 +588,7 @@
           <button type="button" id="gi-edit-cancel-btn" class="btn-secondary">Abbrechen</button>
         </div>
       </form>
-      <h3>Kommentare</h3>
+      <h3 style="margin-top:1.5rem;">Kommentare</h3>
       <ul id="gi-comment-list"></ul>
       <form id="gi-comment-form">
         <textarea name="note" placeholder="Kommentar schreiben..." required></textarea>
