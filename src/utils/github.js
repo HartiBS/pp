@@ -55,8 +55,19 @@ async function githubRequest(path, { method = 'GET', body, projectSettings } = {
     headers['Content-Type'] = 'application/json';
   }
 
-  const baseUrl = stripTrailingSlashes(settings.base_url);
-  const res = await fetch(`${baseUrl}${path}`, {
+  // SSRF-Schutz: base_url validieren (nur http/https, keine credentials im URL)
+  let apiBase;
+  try {
+    const u = new URL(settings.base_url);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('bad protocol');
+    if (u.username || u.password) throw new Error('credentials in url');
+    apiBase = u.origin;
+  } catch {
+    const err = new Error('Ungültige GitHub base_url');
+    err.status = 400;
+    throw err;
+  }
+  const res = await fetch(`${apiBase}${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,

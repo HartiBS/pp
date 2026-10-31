@@ -46,7 +46,19 @@ async function gitlabRequest(path, { method = 'GET', body, projectSettings } = {
     headers['X-GitLab-Username'] = settings.service_account_username;
   }
 
-  const res = await fetch(`${settings.base_url}/api/v4${path}`, {
+  // SSRF-Schutz: base_url validieren (nur http/https, keine credentials im URL)
+  let apiBase;
+  try {
+    const u = new URL(settings.base_url);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('bad protocol');
+    if (u.username || u.password) throw new Error('credentials in url');
+    apiBase = u.origin;
+  } catch {
+    const err = new Error('Ungültige GitLab base_url');
+    err.status = 400;
+    throw err;
+  }
+  const res = await fetch(`${apiBase}/api/v4${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
