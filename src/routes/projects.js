@@ -56,6 +56,28 @@ router.post('/', async (req, res) => {
   }
 });
 
+// #92: Alle Tasks des eingeloggten Users (über alle Projekte)
+router.get('/my-tasks', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT t.*, u.name AS assignee_name, p.name AS project_name, p.id AS project_id
+       FROM tasks t
+       JOIN projects p ON p.id = t.project_id
+       LEFT JOIN users u ON u.id = t.assignee_id
+       WHERE t.assignee_id = $1
+       ORDER BY
+         CASE t.status WHEN 'todo' THEN 1 WHEN 'in_progress' THEN 2 WHEN 'review' THEN 3 ELSE 4 END ASC,
+         t.due_date ASC NULLS LAST,
+         t.created_at DESC`,
+      [req.session.userId]
+    );
+    res.json({ tasks: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
 router.get('/:id', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
   try {
     // #80: Beim Öffnen Issues vom externen Tracker syncen (best effort, nicht-blockierend)
