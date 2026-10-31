@@ -91,6 +91,7 @@ function show(viewId) {
 async function init() {
   initTheme();
   await fetchCsrfToken();
+  loadAppVersion();
   try {
     const { user } = await api('/api/auth/me');
     setUser(user);
@@ -99,6 +100,18 @@ async function init() {
     setInterval(loadNotifications, 60000);
   } catch {
     show('auth-view');
+  }
+}
+
+// #110: Version im Footer (links unten) anzeigen
+async function loadAppVersion() {
+  const el = $('#app-version');
+  if (!el) return;
+  try {
+    const { version } = await api('/api/version');
+    el.textContent = `v${version}`;
+  } catch {
+    el.textContent = '';
   }
 }
 
