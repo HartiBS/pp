@@ -931,10 +931,15 @@ function editUser(u) {
   form.hidden = false;
 }
 
-function bind(id, handler) {
+function bind(id, handler, eventType) {
+  // 'submit' events must use addEventListener, not onclick
+  if (id === 'submit' || eventType === 'submit') {
+    document.addEventListener('submit', handler);
+    return;
+  }
   const el = $(id);
   if (!el) {
-    console.error(`Element nicht gefunden: ${id}`);
+    // Silent for optional elements (removed in refactors) – no console spam
     return;
   }
   el.onclick = handler;
