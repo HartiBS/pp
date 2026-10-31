@@ -75,7 +75,7 @@ function setUser(user) {
   }
 }
 
-const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view', 'gitlab-projects-view', 'task-detail-view'];
+const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view', 'gitlab-projects-view', 'task-detail-view', 'my-tasks-view'];
 
 function show(viewId) {
   for (const id of VIEWS) {
@@ -1021,6 +1021,51 @@ bind('#sync-milestones-btn', async () => {
 
 bind('#profile-btn', () => loadProfile());
 bind('#profile-back-btn', () => loadDashboard());
+bind('#my-tasks-btn', () => loadMyTasks());
+bind('#my-tasks-back-btn', () => loadDashboard());
+
+/* ===== #92: MEINE TASKS ===== */
+async function loadMyTasks() {
+  try {
+    const { tasks } = await api('/api/projects/my-tasks');
+    renderMyTasks(tasks);
+    show('my-tasks-view');
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function renderMyTasks(tasks) {
+  const list = $('#my-tasks-list');
+  list.innerHTML = '';
+  if (!tasks.length) {
+    list.innerHTML = '<li><small style="color:var(--text-muted);">Dir sind aktuell keine Tasks zugewiesen.</small></li>';
+    return;
+  }
+  for (const t of tasks) {
+    const li = document.createElement('li');
+    li.style.cssText = 'display:flex; align-items:center; gap:0.5rem; padding:0.75rem; cursor:pointer;';
+    li.innerHTML = `
+      <span style="flex:1;">#${t.id} ${escapeHtml(t.title)}</span>
+      <small style="color:var(--text-muted);">${escapeHtml(t.project_name)}</small>
+      ${priorityBadge(t.priority || 'normal')}
+      <span class="badge ${badgeClass(t.status)}">${t.status}</span>
+      ${t.due_date ? `<small style="color:var(--text-muted);">\ud83d\udcc5 ${t.due_date}</small>` : ''}
+    `;
+    li.onclick = async () => {
+      try {
+        const { project } = await api(`/api/projects/${t.project_id}?no_sync=1`);
+        state.currentProject = project;
+        await loadProject(t.project_id);
+        loadTaskDetail(t.project_id, t.id);
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+    list.appendChild(li);
+  }
+}
+
 
 document.addEventListener('submit', async (e) => {
   if (e.target.id === 'profile-form') {
@@ -1382,8 +1427,6 @@ document.addEventListener('submit', async (e) => {
   }
 });
 
-init();
-
 /* ===== EPIC 6: AUFGABENMANAGEMENT ===== */
 
 const PRIORITY_LABELS = { low: 'Niedrig', normal: 'Normal', high: 'Hoch', critical: 'Kritisch' };
@@ -1661,7 +1704,7 @@ function bindTaskDetailEvents() {
   bind('#td-tab-watchers-btn', () => setTaskDetailTab('watchers'));
 
   // Edit form
-  bind('submit', async (e) => {
+  document.addEventListener('submit', async (e) => {
     if (e.target.id === 'td-edit-form') {
       e.preventDefault();
       if (!state.currentTask || !state.currentProject) return;
@@ -1708,7 +1751,7 @@ function bindTaskDetailEvents() {
   });
 
   // Comment form
-  bind('submit', async (e) => {
+  document.addEventListener('submit', async (e) => {
     if (e.target.id === 'td-comment-form') {
       e.preventDefault();
       if (!state.currentTask || !state.currentProject) return;
@@ -1724,7 +1767,7 @@ function bindTaskDetailEvents() {
   });
 
   // Subtask form
-  bind('submit', async (e) => {
+  document.addEventListener('submit', async (e) => {
     if (e.target.id === 'td-subtask-form') {
       e.preventDefault();
       if (!state.currentTask || !state.currentProject) return;
@@ -1845,6 +1888,8 @@ init = async function() {
   await _origInit();
   bindTaskDetailEvents();
 };
+
+init();
 
 /* ===== HOOK INTO renderTaskList TO ADD data-task-id ===== */
 const _origRenderTaskList = renderTaskList;
