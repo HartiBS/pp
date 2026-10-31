@@ -2866,16 +2866,36 @@ bind('#admin-project-test-conn-btn', async () => {
   const projectId = form.elements['id'].value;
   const msgEl = $('#admin-project-conn-msg');
   const detailEl = $('#admin-project-conn-detail');
+  // Werte direkt aus dem Formular lesen (auch wenn noch nicht gespeichert)
+  const fd = new FormData(form);
+  const trackerType = fd.get('issue_tracker_type') || 'none';
+  const connBaseUrl = fd.get('conn_base_url') || '';
+  const connToken = fd.get('conn_access_token') || '';
+  const connSa = fd.get('conn_service_account') || '';
   if (msgEl) { msgEl.textContent = 'Teste Verbindung...'; msgEl.style.color = 'var(--text-muted)'; }
   if (detailEl) { detailEl.hidden = false; detailEl.textContent = ''; }
+  if (trackerType === 'none') {
+    if (msgEl) { msgEl.textContent = '❌ Bitte zuerst GitLab oder GitHub als Tracker wählen.'; msgEl.style.color = 'var(--danger, #f44336)'; }
+    if (detailEl) { detailEl.textContent = JSON.stringify({ status: 'FEHLER', error: 'Tracker-Typ ist "Keiner" – bitte GitLab oder GitHub wählen.' }, null, 2); }
+    return;
+  }
+  if (!connBaseUrl || !connToken) {
+    if (msgEl) { msgEl.textContent = '❌ Bitte API-URL und Access Token eingeben.'; msgEl.style.color = 'var(--danger, #f44336)'; }
+    if (detailEl) { detailEl.textContent = JSON.stringify({ status: 'FEHLER', error: 'API-URL und Access Token fehlen im Formular.' }, null, 2); }
+    return;
+  }
   try {
-    const r = await api(`/api/projects/${projectId}/tracker/settings/test`, { method: 'POST' });
-    const src = r.used_project_settings ? 'projekt-spezifisch' : 'global';
-    if (msgEl) { msgEl.textContent = '✅ OK: @' + (r.user.username || r.user.login || r.user.name) + ' (' + src + ', ' + (r.response_time_ms || '?') + 'ms)'; msgEl.style.color = 'var(--success, #4caf50)'; }
+    const r = await api(`/api/projects/${projectId}/tracker/settings/test`, {
+      method: 'POST',
+      body: { type: trackerType, base_url: connBaseUrl, access_token: connToken, service_account_username: connSa || null },
+    });
+    const src = r.used_project_settings ? 'Formular-Werte' : 'gespeichert';
+    if (msgEl) { msgEl.textContent = '✅ OK: @' + (r.user.username || r.user.login || r.user.name) + ' (' + r.service + ', ' + (r.response_time_ms || '?') + 'ms)'; msgEl.style.color = 'var(--success, #4caf50)'; }
     if (detailEl) {
       detailEl.textContent = JSON.stringify({
         status: 'OK (HTTP ' + (r.http_status || 200) + ')',
         service: r.service,
+        tested_type: r.tested_type,
         base_url: r.base_url,
         settings_source: src,
         user: r.user,
@@ -2887,7 +2907,10 @@ bind('#admin-project-test-conn-btn', async () => {
     if (detailEl) {
       detailEl.textContent = JSON.stringify({
         status: 'FEHLER (HTTP ' + (err.status || '?') + ')',
+        tested_type: trackerType,
+        base_url: connBaseUrl,
         error: err.message,
+        response_time_ms: null,
       }, null, 2);
     }
   }

@@ -1124,13 +1124,19 @@ router.delete('/:id/tracker/settings', loadProjectRole, requireProjectPermission
 });
 
 // Verbindungstest MIT projekt-spezifischen Settings – mit ausführlicher Rückmeldung von Git
+// Akzeptiert optionalen Body { type, base_url, access_token, service_account_username } für Ad-hoc-Test
 router.post('/:id/tracker/settings/test', loadProjectRole, requireProjectPermission('edit_project'), async (req, res) => {
   const startedAt = Date.now();
   try {
     const tracker = await issueTracker.getProjectTracker(req.params.id);
     if (!tracker) return res.status(404).json({ ok: false, error: 'Projekt nicht gefunden', http_status: 404 });
-    const type = tracker.issue_tracker_type || 'none';
-    const projectSettings = issueTracker.getEffectiveSettings(tracker);
+    // Typ aus Request-Body (Formular) oder aus DB (gespeichert)
+    const type = req.body.type || tracker.issue_tracker_type || 'none';
+    // Ad-hoc Settings aus dem Formular, falls vorhanden – sonst gespeicherte projekt-spezifische
+    const adhoc = (req.body.base_url && req.body.access_token)
+      ? { base_url: req.body.base_url, access_token: req.body.access_token, service_account_username: req.body.service_account_username || null }
+      : null;
+    const projectSettings = adhoc || issueTracker.getEffectiveSettings(tracker);
     const opts = { projectSettings };
     const baseUrl = projectSettings ? projectSettings.base_url : (type === 'github' ? 'https://api.github.com' : null);
     if (type === 'gitlab') {
@@ -1138,6 +1144,7 @@ router.post('/:id/tracker/settings/test', loadProjectRole, requireProjectPermiss
       return res.json({
         ok: true, service: 'gitlab', http_status: 200,
         used_project_settings: !!projectSettings,
+        tested_type: type,
         base_url: baseUrl,
         user: { id: user.id, username: user.username, name: user.name, state: user.state, web_url: user.web_url },
         response_time_ms: Date.now() - startedAt,
@@ -1148,12 +1155,13 @@ router.post('/:id/tracker/settings/test', loadProjectRole, requireProjectPermiss
       return res.json({
         ok: true, service: 'github', http_status: 200,
         used_project_settings: !!projectSettings,
+        tested_type: type,
         base_url: baseUrl,
         user: { id: user.id, username: user.login || user.username, name: user.name, type: user.type, web_url: user.html_url },
         response_time_ms: Date.now() - startedAt,
       });
     }
-    return res.status(400).json({ ok: false, error: 'Projekt hat keinen Tracker-Typ (none)', http_status: 400 });
+    return res.status(400).json({ ok: false, error: 'Kein Tracker-Typ angegeben (none). Wähle GitLab oder GitHub im Formular.', http_status: 400, tested_type: type });
   } catch (err) {
     res.status(err.status || 502).json({
       ok: false,
