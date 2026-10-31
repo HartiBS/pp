@@ -2,6 +2,25 @@ const db = require('../config/database');
 const taskMarkdown = require('./taskMarkdown');
 const taskRelations = require('./taskRelations');
 const { version } = require('../../package.json');
+/**
+ * Parst und validiert eine URL streng.
+ * Gibt nur { protocol, host } zurück – kein Pfad, keine Query, keine Credentials.
+ * Erlaubt nur http/https und rejectiert Credentials im URL.
+ */
+function safeParseUrl(raw) {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if (u.username || u.password) return null;
+    if (!u.hostname) return null;
+    // Host darf keine Steuerzeichen/Whitespace enthalten
+    if (/[\s\u0000-\u001f]/.test(u.host)) return null;
+    return { protocol: u.protocol, host: u.host };
+  } catch {
+    return null;
+  }
+}
+
 
 async function getSettings() {
   const { rows } = await db.query(
@@ -46,19 +65,15 @@ async function gitlabRequest(path, { method = 'GET', body, projectSettings } = {
     headers['X-GitLab-Username'] = settings.service_account_username;
   }
 
-  // SSRF-Schutz: base_url validieren (nur http/https, keine credentials im URL)
-  let apiBase;
-  try {
-    const u = new URL(settings.base_url);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('bad protocol');
-    if (u.username || u.password) throw new Error('credentials in url');
-    apiBase = u.origin;
-  } catch {
+  // SSRF-Schutz: base_url strikt validieren und nur validierte Komponenten verwenden
+  const parsed = safeParseUrl(settings.base_url);
+  if (!parsed) {
     const err = new Error('Ungültige GitLab base_url');
     err.status = 400;
     throw err;
   }
-  const res = await fetch(`${apiBase}/api/v4${path}`, {
+  const apiUrl = parsed.protocol + '//' + parsed.host + '/api/v4' + path;
+  const res = await fetch(apiUrl, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
