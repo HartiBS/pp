@@ -8,285 +8,139 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: Georgia, 'Times New Roman', serif;
-      background: #faf7f2;
-      color: #3d2914;
-      min-height: 100vh;
-      line-height: 1.6;
+      background: #faf7f2; color: #3d2914; min-height: 100vh; line-height: 1.6; padding-top: 28px;
     }
-    /* ===== TOPBAR ===== */
     .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 1.2rem 3rem;
-      background: #fff;
-      border-bottom: 2px solid #ede4d3;
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 1.2rem 3rem; background: #fff; border-bottom: 2px solid #ede4d3;
+      position: sticky; top: 28px; z-index: 10;
     }
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 0.7rem;
-      font-size: 1.3rem;
-      font-weight: 400;
-      letter-spacing: 1px;
-      color: #b45309;
-    }
+    .logo { display: flex; align-items: center; gap: 0.7rem; font-size: 1.3rem; font-weight: 400; letter-spacing: 1px; color: #b45309; }
     .logo-icon {
-      width: 38px; height: 38px;
-      background: #fde68a;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.1rem;
+      width: 38px; height: 38px; background: #fde68a; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
     }
-    .user-box { display: flex; align-items: center; gap: 1rem; }
+    .topbar nav { display: flex; gap: 0.75rem; align-items: center; }
+    .user-box { display: flex; align-items: center; gap: 0.75rem; }
     .user-avatar {
-      width: 36px; height: 36px; border-radius: 50%;
-      background: #f59e0b;
-      color: #fff;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 600; font-size: 0.85rem;
+      width: 36px; height: 36px; border-radius: 50%; background: #f59e0b; color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.85rem;
       font-family: system-ui, sans-serif;
     }
-    .btn-logout {
-      padding: 0.4rem 1.2rem;
-      background: transparent;
-      border: 1.5px solid #d6c9a8;
-      border-radius: 999px;
-      color: #8b7355;
-      cursor: pointer;
-      font-size: 0.85rem;
-      font-family: system-ui, sans-serif;
-    }
-    .btn-logout:hover { border-color: #b45309; color: #b45309; }
-
-    /* ===== LAYOUT ===== */
     .main { max-width: 760px; margin: 0 auto; padding: 3rem 1.5rem; }
-    .page-title {
-      font-size: 2rem;
-      font-weight: 400;
-      margin-bottom: 0.3rem;
-      color: #292524;
-    }
+    .page-title { font-size: 2rem; font-weight: 400; margin-bottom: 0.3rem; color: #292524; }
     .page-sub { color: #a8a29e; margin-bottom: 2rem; font-size: 0.95rem; }
-
-    /* ===== BUTTONS ===== */
     .btn-primary {
-      padding: 0.7rem 1.8rem;
-      background: #d97706;
-      color: #fff;
-      border: none;
-      border-radius: 999px;
-      font-weight: 500;
-      cursor: pointer;
-      font-size: 0.9rem;
-      font-family: system-ui, sans-serif;
-      letter-spacing: 0.3px;
+      padding: 0.7rem 1.8rem; background: #d97706; color: #fff; border: none; border-radius: 999px;
+      font-weight: 500; cursor: pointer; font-size: 0.9rem; font-family: system-ui, sans-serif; letter-spacing: 0.3px;
     }
     .btn-primary:hover { background: #b45309; }
     .btn-secondary {
-      padding: 0.7rem 1.8rem;
-      background: transparent;
-      color: #78716c;
-      border: 1.5px solid #e7e5e4;
-      border-radius: 999px;
-      font-weight: 500;
-      cursor: pointer;
-      font-size: 0.9rem;
-      font-family: system-ui, sans-serif;
+      padding: 0.65rem 1.5rem; background: transparent; color: #78716c; border: 1.5px solid #e7e5e4;
+      border-radius: 999px; font-weight: 500; cursor: pointer; font-size: 0.85rem; font-family: system-ui, sans-serif;
     }
-    .btn-secondary:hover { border-color: #d6d3d1; color: #44403c; }
-
-    /* ===== AUTH ===== */
     .auth-wrapper { display: flex; justify-content: center; padding-top: 3rem; }
     .auth-card {
-      background: #fff;
-      border-radius: 20px;
-      padding: 3rem 2.5rem;
-      width: 100%;
-      max-width: 420px;
-      box-shadow: 0 2px 16px rgba(180,83,9,0.06);
-      border: 1px solid #f5f0e6;
+      background: #fff; border-radius: 20px; padding: 3rem 2.5rem; width: 100%; max-width: 420px;
+      box-shadow: 0 2px 16px rgba(180,83,9,0.06); border: 1px solid #f5f0e6;
     }
     .auth-card h2 { font-size: 1.5rem; font-weight: 400; margin-bottom: 1.5rem; text-align: center; }
-    .auth-tabs {
-      display: flex;
-      justify-content: center;
-      gap: 2rem;
-      margin-bottom: 2rem;
-    }
+    .auth-tabs { display: flex; justify-content: center; gap: 2rem; margin-bottom: 2rem; }
     .auth-tab {
-      padding: 0.4rem 0;
-      font-size: 0.9rem;
-      color: #a8a29e;
-      cursor: pointer;
-      font-family: system-ui, sans-serif;
-      border-bottom: 2px solid transparent;
+      padding: 0.4rem 0; font-size: 0.9rem; color: #a8a29e; cursor: pointer;
+      font-family: system-ui, sans-serif; border-bottom: 2px solid transparent;
     }
     .auth-tab.active { color: #b45309; border-bottom-color: #f59e0b; font-weight: 600; }
-
-    /* ===== FORMS ===== */
     .form-group { margin-bottom: 1.2rem; }
-    .form-group label {
-      display: block;
-      font-size: 0.82rem;
-      color: #78716c;
-      margin-bottom: 0.4rem;
-      font-family: system-ui, sans-serif;
-    }
+    .form-group label { display: block; font-size: 0.82rem; color: #78716c; margin-bottom: 0.4rem; font-family: system-ui, sans-serif; }
     input, textarea, select {
-      width: 100%;
-      padding: 0.75rem 1rem;
-      border: none;
-      border-bottom: 2px solid #e7e5e4;
-      border-radius: 0;
-      font-size: 0.95rem;
-      background: transparent;
-      color: #292524;
-      font-family: Georgia, serif;
-      transition: border-color 0.15s;
+      width: 100%; padding: 0.75rem 1rem; border: none; border-bottom: 2px solid #e7e5e4; border-radius: 0;
+      font-size: 0.95rem; background: transparent; color: #292524; font-family: Georgia, serif; transition: border-color 0.15s;
     }
-    input:focus, textarea:focus, select:focus {
-      outline: none;
-      border-bottom-color: #f59e0b;
-    }
+    input:focus, textarea:focus, select:focus { outline: none; border-bottom-color: #f59e0b; }
     input::placeholder, textarea::placeholder { color: #d6d3d1; }
-
-    /* ===== PROJECT LIST ===== */
-    .dashboard-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 2rem;
+    form.card-form, #new-project-form, #profile-form, #user-form {
+      display: flex; flex-direction: column; gap: 1.2rem; background: #fff; border-radius: 16px;
+      padding: 2rem; margin-bottom: 1.5rem; border: 1px solid #f5f0e6;
     }
+    .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
     .project-list { list-style: none; display: flex; flex-direction: column; gap: 1rem; }
     .project-item {
-      background: #fff;
-      border-radius: 16px;
-      padding: 1.5rem 1.8rem;
-      cursor: pointer;
-      border: 1px solid #f5f0e6;
-      box-shadow: 0 1px 8px rgba(180,83,9,0.04);
-      transition: box-shadow 0.2s;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      background: #fff; border-radius: 16px; padding: 1.5rem 1.8rem; cursor: pointer;
+      border: 1px solid #f5f0e6; box-shadow: 0 1px 8px rgba(180,83,9,0.04);
+      transition: box-shadow 0.2s; display: flex; justify-content: space-between; align-items: center;
     }
     .project-item:hover { box-shadow: 0 4px 20px rgba(180,83,9,0.08); }
     .project-item h3 { font-size: 1.15rem; font-weight: 400; margin-bottom: 0.3rem; }
     .project-item p { font-size: 0.88rem; color: #a8a29e; }
     .project-item .meta { text-align: right; }
     .task-count { font-size: 0.82rem; color: #a8a29e; font-family: system-ui, sans-serif; display: block; margin-bottom: 0.4rem; }
-
-    /* ===== BADGES ===== */
-    .badge {
-      padding: 0.3rem 0.9rem;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 500;
-      font-family: system-ui, sans-serif;
-    }
+    .badge { padding: 0.3rem 0.9rem; border-radius: 999px; font-size: 0.75rem; font-weight: 500; font-family: system-ui, sans-serif; white-space: nowrap; }
     .badge-active { background: #fef3c7; color: #b45309; }
     .badge-planning { background: #ffedd5; color: #c2410c; }
     .badge-done { background: #dcfce7; color: #15803d; }
     .badge-todo { background: #f5f5f4; color: #78716c; }
     .badge-in_progress { background: #ffedd5; color: #ea580c; }
     .badge-review { background: #ede9fe; color: #6d28d9; }
-
-    /* ===== TASK LIST ===== */
     .task-list { list-style: none; display: flex; flex-direction: column; gap: 0.7rem; margin-top: 1.2rem; }
     .task-item {
-      background: #fff;
-      border-radius: 12px;
-      padding: 1rem 1.4rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border: 1px solid #f5f0e6;
-      font-size: 0.95rem;
+      background: #fff; border-radius: 12px; padding: 1rem 1.4rem; display: flex;
+      justify-content: space-between; align-items: center; border: 1px solid #f5f0e6; font-size: 0.95rem;
     }
     .back-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      color: #a8a29e;
-      cursor: pointer;
-      font-size: 0.85rem;
-      margin-bottom: 1.5rem;
-      background: none; border: none;
-      font-family: system-ui, sans-serif;
+      display: inline-flex; align-items: center; gap: 0.5rem; color: #a8a29e; cursor: pointer;
+      font-size: 0.85rem; margin-bottom: 1.5rem; background: none; border: none; font-family: system-ui, sans-serif;
     }
     .back-btn:hover { color: #b45309; }
-
-    /* ===== SECTION DIVIDER ===== */
-    .divider {
-      width: 60px;
-      height: 3px;
-      background: #f59e0b;
-      border-radius: 999px;
-      margin: 0 0 1.5rem;
-    }
-
-    /* ===== DUMMY NAV ===== */
+    .divider { width: 60px; height: 3px; background: #f59e0b; border-radius: 999px; margin: 0 0 1.5rem; }
+    #user-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 16px; overflow: hidden; border: 1px solid #f5f0e6; }
+    #user-table th, #user-table td { text-align: left; padding: 0.85rem 1.1rem; border-bottom: 1px solid #f5f0e6; font-size: 0.85rem; font-family: system-ui, sans-serif; }
+    #user-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.5px; color: #a8a29e; font-weight: 600; }
+    #user-table td button { margin-right: 0.4rem; padding: 0.35rem 0.75rem; font-size: 0.78rem; }
+    #user-table td button:last-child { background: #dc2626; }
+    .form-row { display: flex; gap: 0.75rem; }
+    .form-row input { flex: 1; }
     .dummy-nav {
-      position: fixed;
-      bottom: 1.5rem;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #292524;
-      border-radius: 999px;
-      padding: 0.5rem 0.75rem;
-      display: flex;
-      gap: 0.4rem;
-      z-index: 100;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+      background: #292524; border-radius: 999px; padding: 0.5rem 0.75rem; display: flex; gap: 0.4rem;
+      z-index: 100; box-shadow: 0 8px 32px rgba(0,0,0,0.2); flex-wrap: wrap; justify-content: center; max-width: 95vw;
     }
     .dummy-nav button {
-      padding: 0.5rem 1.1rem;
-      border: none;
-      border-radius: 999px;
-      background: transparent;
-      color: #a8a29e;
-      cursor: pointer;
-      font-size: 0.8rem;
-      font-family: system-ui, sans-serif;
+      padding: 0.5rem 0.9rem; border: none; border-radius: 999px; background: transparent;
+      color: #a8a29e; cursor: pointer; font-size: 0.75rem; font-family: system-ui, sans-serif; white-space: nowrap;
     }
     .dummy-nav button.active { background: #d97706; color: #fff; }
+    .dummy-nav a { padding: 0.5rem 0.9rem; color: #a8a29e; text-decoration: none; font-size: 0.75rem; font-family: system-ui, sans-serif; white-space: nowrap; }
     .dummy-banner {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      background: #d97706;
-      color: #fff;
-      text-align: center;
-      padding: 0.3rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      z-index: 200;
-      font-family: system-ui, sans-serif;
+      position: fixed; top: 0; left: 0; right: 0; background: #d97706; color: #fff;
+      text-align: center; padding: 0.3rem; font-size: 0.75rem; font-weight: 600; z-index: 200; font-family: system-ui, sans-serif;
     }
-    body { padding-top: 28px; }
+    #profile-form label, #user-form label { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem; color: #78716c; font-family: system-ui, sans-serif; }
+    .section-label { font-size: 1.1rem; font-weight: 400; margin-bottom: 1rem; color: #292524; }
   </style>
 </head>
 <body>
-  <div class="dummy-banner">🎨 KLICKDUMMY – Vorschlag C: Warm Minimal</div>
+  <div class="dummy-banner">🎨 KLICKDUMMY – Vorschlag C: Warm Minimal (5 Ansichten)</div>
 
   <header class="topbar" id="topbar" hidden>
     <div class="logo">
       <div class="logo-icon">✦</div>
       <span>Projektverwaltung</span>
     </div>
-    <div class="user-box">
-      <div class="user-avatar">MM</div>
-      <span style="font-family:system-ui,sans-serif; font-size:0.85rem;">Max Mustermann</span>
-      <button class="btn-logout">Abmelden</button>
-    </div>
+    <nav>
+      <div class="user-box">
+        <div class="user-avatar">MM</div>
+        <span style="font-family:system-ui,sans-serif; font-size:0.85rem;">Max Mustermann</span>
+        <button class="btn-secondary">Profil</button>
+        <button class="btn-secondary">Admin</button>
+        <button class="btn-secondary">Abmelden</button>
+      </div>
+    </nav>
   </header>
 
   <main class="main">
 
-    <!-- ===== ANSICHT 1: LOGIN ===== -->
+    <!-- 1: LOGIN -->
     <section id="view-auth">
       <div class="auth-wrapper">
         <div class="auth-card">
@@ -299,146 +153,137 @@
             <div class="auth-tab active">Anmelden</div>
             <div class="auth-tab">Registrieren</div>
           </div>
-          <form onsubmit="return false">
-            <div class="form-group">
-              <label>E-Mail</label>
-              <input type="email" placeholder="max@beispiel.de" value="max@beispiel.de">
-            </div>
-            <div class="form-group">
-              <label>Passwort</label>
-              <input type="password" placeholder="••••••••" value="password">
-            </div>
+          <form class="card-form" style="background:transparent;border:none;padding:0;margin:0;box-shadow:none;" onsubmit="return false">
+            <div class="form-group"><label>E-Mail</label><input type="email" placeholder="max@beispiel.de" value="max@beispiel.de"></div>
+            <div class="form-group"><label>Passwort</label><input type="password" placeholder="••••••••" value="password"></div>
             <button class="btn-primary" style="width:100%; margin-top:0.8rem;">Einloggen</button>
           </form>
-          <p style="text-align:center; color:#a8a29e; font-size:0.82rem; margin-top:1.5rem; font-family:system-ui,sans-serif;">
-            Noch kein Konto? <span style="color:#b45309; cursor:pointer;">Registrieren</span>
-          </p>
         </div>
       </div>
     </section>
 
-    <!-- ===== ANSICHT 2: DASHBOARD ===== -->
+    <!-- 2: DASHBOARD -->
     <section id="view-dashboard" hidden>
       <div class="dashboard-header">
         <div>
           <div class="page-title">Meine Projekte</div>
           <div class="page-sub">Übersicht über alle laufenden Projekte</div>
         </div>
-        <button class="btn-primary">+ Neues Projekt</button>
+        <button class="btn-primary" onclick="document.getElementById('new-project-form').hidden = !document.getElementById('new-project-form').hidden;">+ Neues Projekt</button>
       </div>
-
       <div class="divider"></div>
-
-      <div id="new-project-form" hidden style="background:#fff; border-radius:16px; padding:2rem; margin-bottom:1.5rem; border:1px solid #f5f0e6;">
-        <h3 style="font-weight:400; font-size:1.2rem; margin-bottom:1.2rem;">Neues Projekt</h3>
-        <div class="form-group">
-          <label>Projektname</label>
-          <input type="text" placeholder="z.B. Website-Relaunch">
-        </div>
-        <div class="form-group">
-          <label>Beschreibung</label>
-          <textarea rows="3" placeholder="Kurze Beschreibung..."></textarea>
-        </div>
+      <div id="new-project-form" hidden>
+        <div class="section-label">Neues Projekt</div>
+        <div class="form-group"><label>Projektname</label><input type="text" placeholder="z.B. Website-Relaunch"></div>
+        <div class="form-group"><label>Beschreibung</label><textarea rows="3" placeholder="Kurze Beschreibung..."></textarea></div>
         <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
           <button class="btn-primary">Anlegen</button>
-          <button class="btn-secondary">Abbrechen</button>
+          <button class="btn-secondary" onclick="document.getElementById('new-project-form').hidden = true;">Abbrechen</button>
         </div>
       </div>
-
       <ul class="project-list">
-        <li class="project-item">
-          <div>
-            <h3>Website-Relaunch</h3>
-            <p>Neue Firmenwebsite mit CMS und Blog</p>
-          </div>
-          <div class="meta">
-            <span class="task-count">12 Tasks</span>
-            <span class="badge badge-active">Aktiv</span>
-          </div>
+        <li class="project-item" onclick="showView('detail')">
+          <div><h3>Website-Relaunch</h3><p>Neue Firmenwebsite mit CMS und Blog</p></div>
+          <div class="meta"><span class="task-count">12 Tasks</span><span class="badge badge-active">Aktiv</span></div>
         </li>
-        <li class="project-item">
-          <div>
-            <h3>Mobile App</h3>
-            <p>iOS &amp; Android App für Kundenbindung</p>
-          </div>
-          <div class="meta">
-            <span class="task-count">8 Tasks</span>
-            <span class="badge badge-planning">Planung</span>
-          </div>
+        <li class="project-item" onclick="showView('detail')">
+          <div><h3>Mobile App</h3><p>iOS &amp; Android App für Kundenbindung</p></div>
+          <div class="meta"><span class="task-count">8 Tasks</span><span class="badge badge-planning">Planung</span></div>
         </li>
-        <li class="project-item">
-          <div>
-            <h3>API-Migration</h3>
-            <p>Umstellung auf REST API v2</p>
-          </div>
-          <div class="meta">
-            <span class="task-count">5 Tasks</span>
-            <span class="badge badge-done">Abgeschlossen</span>
-          </div>
+        <li class="project-item" onclick="showView('detail')">
+          <div><h3>API-Migration</h3><p>Umstellung auf REST API v2</p></div>
+          <div class="meta"><span class="task-count">5 Tasks</span><span class="badge badge-done">Abgeschlossen</span></div>
         </li>
       </ul>
     </section>
 
-    <!-- ===== ANSICHT 3: PROJEKTDETAIL ===== -->
+    <!-- 3: DETAIL -->
     <section id="view-detail" hidden>
-      <button class="back-btn">← Zurück</button>
+      <button class="back-btn" onclick="showView('dashboard')">← Zurück</button>
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.5rem;">
         <div class="page-title">Website-Relaunch</div>
         <span class="badge badge-active">Aktiv</span>
       </div>
       <div class="page-sub" style="margin-bottom:1rem;">Neue Firmenwebsite mit CMS und Blog</div>
       <div class="divider"></div>
-
-      <h3 style="font-weight:400; font-size:1.1rem; margin-bottom:1rem;">Aufgaben</h3>
-
-      <form onsubmit="return false" style="display:flex; gap:0.75rem; margin-bottom:1rem;">
-        <input type="text" placeholder="Neue Aufgabe..." style="flex:1;">
+      <div class="section-label">Aufgaben</div>
+      <form class="form-row" style="margin-bottom:1rem;" onsubmit="return false">
+        <input type="text" placeholder="Neue Aufgabe...">
         <button class="btn-primary">Hinzufügen</button>
       </form>
-
       <ul class="task-list">
-        <li class="task-item">
-          <span>Design-Mockups erstellen</span>
-          <span class="badge badge-done">Erledigt</span>
-        </li>
-        <li class="task-item">
-          <span>Startseite entwickeln</span>
-          <span class="badge badge-in_progress">In Arbeit</span>
-        </li>
-        <li class="task-item">
-          <span>CMS integrieren</span>
-          <span class="badge badge-review">Review</span>
-        </li>
-        <li class="task-item">
-          <span>Kontaktformular bauen</span>
-          <span class="badge badge-todo">Offen</span>
-        </li>
-        <li class="task-item">
-          <span>SEO-Optimierung</span>
-          <span class="badge badge-todo">Offen</span>
-        </li>
+        <li class="task-item"><span>Design-Mockups erstellen</span><span class="badge badge-done">Erledigt</span></li>
+        <li class="task-item"><span>Startseite entwickeln</span><span class="badge badge-in_progress">In Arbeit</span></li>
+        <li class="task-item"><span>CMS integrieren</span><span class="badge badge-review">Review</span></li>
+        <li class="task-item"><span>Kontaktformular bauen</span><span class="badge badge-todo">Offen</span></li>
+        <li class="task-item"><span>SEO-Optimierung</span><span class="badge badge-todo">Offen</span></li>
       </ul>
+    </section>
+
+    <!-- 4: PROFIL -->
+    <section id="view-profile" hidden>
+      <button class="back-btn" onclick="showView('dashboard')">← Zurück</button>
+      <div class="page-title" style="margin-bottom:1.5rem;">Profil bearbeiten</div>
+      <form id="profile-form" onsubmit="return false">
+        <div class="form-group"><label>Name</label><input type="text" value="Max Mustermann"></div>
+        <div class="form-group"><label>E-Mail</label><input type="email" value="max@beispiel.de"></div>
+        <div class="section-label" style="margin-top:0.5rem;">Passwort ändern</div>
+        <div class="form-group"><label>Aktuelles Passwort</label><input type="password" placeholder="••••••••"></div>
+        <div class="form-group"><label>Neues Passwort</label><input type="password" placeholder="Neues Passwort"></div>
+        <button class="btn-primary" style="align-self:flex-start;">Speichern</button>
+      </form>
+    </section>
+
+    <!-- 5: ADMIN -->
+    <section id="view-admin" hidden>
+      <button class="back-btn" onclick="showView('dashboard')">← Zurück</button>
+      <div class="dashboard-header">
+        <div class="page-title">Benutzerverwaltung</div>
+        <button class="btn-primary" onclick="document.getElementById('user-form').hidden = !document.getElementById('user-form').hidden;">+ Neuer Benutzer</button>
+      </div>
+      <form id="user-form" hidden onsubmit="return false">
+        <div class="form-group"><label>Name</label><input type="text" placeholder="Name"></div>
+        <div class="form-group"><label>E-Mail</label><input type="email" placeholder="E-Mail"></div>
+        <div class="form-group"><label>Passwort</label><input type="password" placeholder="Passwort"></div>
+        <div class="form-group"><label>Rolle</label>
+          <select><option>Admin</option><option>Projektmanager</option><option selected>Entwickler</option><option>Beobachter</option></select>
+        </div>
+        <label style="display:flex; flex-direction:row; align-items:center; gap:0.5rem; font-size:0.85rem; color:#78716c;"><input type="checkbox" checked style="width:auto;"> Aktiv</label>
+        <div style="display:flex; gap:0.75rem; margin-top:1rem;">
+          <button class="btn-primary">Speichern</button>
+          <button class="btn-secondary" type="button" onclick="document.getElementById('user-form').hidden = true;">Abbrechen</button>
+        </div>
+      </form>
+      <table id="user-table">
+        <thead><tr><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Aktionen</th></tr></thead>
+        <tbody>
+          <tr><td>Max Mustermann</td><td>max@beispiel.de</td><td><span class="badge badge-active">Admin</span></td><td>aktiv</td><td><button class="btn-secondary">Bearbeiten</button><button class="btn-secondary">Deaktivieren</button><button>Löschen</button></td></tr>
+          <tr><td>Erika Musterfrau</td><td>erika@beispiel.de</td><td><span class="badge badge-in_progress">Projektmanager</span></td><td>aktiv</td><td><button class="btn-secondary">Bearbeiten</button><button class="btn-secondary">Deaktivieren</button><button>Löschen</button></td></tr>
+          <tr><td>Tom Tester</td><td>tom@beispiel.de</td><td><span class="badge badge-review">Entwickler</span></td><td>deaktiviert</td><td><button class="btn-secondary">Bearbeiten</button><button class="btn-secondary">Aktivieren</button><button>Löschen</button></td></tr>
+        </tbody>
+      </table>
     </section>
 
   </main>
 
   <nav class="dummy-nav">
-    <button onclick="showView('auth')" id="nav-auth">Login</button>
-    <button onclick="showView('dashboard')" id="nav-dashboard" class="active">Dashboard</button>
-    <button onclick="showView('detail')" id="nav-detail">Detail</button>
-    <button onclick="document.getElementById('new-project-form').hidden = !document.getElementById('new-project-form').hidden; showView('dashboard')">Formular</button>
-    <a href="index.html" style="padding:0.5rem 1.1rem; color:#a8a29e; text-decoration:none; font-size:0.8rem; font-family:system-ui,sans-serif;">← Übersicht</a>
+    <button onclick="showView('auth')" data-view="auth">🔑 Login</button>
+    <button onclick="showView('dashboard')" data-view="dashboard" class="active">📊 Dashboard</button>
+    <button onclick="showView('detail')" data-view="detail">📋 Detail</button>
+    <button onclick="showView('profile')" data-view="profile">👤 Profil</button>
+    <button onclick="showView('admin')" data-view="admin">🛠 Admin</button>
+    <a href="index.html">← Übersicht</a>
   </nav>
 
   <script>
     function showView(view) {
-      document.getElementById('view-auth').hidden = view !== 'auth';
-      document.getElementById('view-dashboard').hidden = view !== 'dashboard';
-      document.getElementById('view-detail').hidden = view !== 'detail';
+      for (const v of ['auth', 'dashboard', 'detail', 'profile', 'admin']) {
+        const el = document.getElementById('view-' + v);
+        if (el) el.hidden = v !== view;
+      }
       document.getElementById('topbar').hidden = view === 'auth';
-      document.querySelectorAll('.dummy-nav button').forEach(b => b.classList.remove('active'));
-      const map = { auth: 'nav-auth', dashboard: 'nav-dashboard', detail: 'nav-detail' };
-      if (map[view]) document.getElementById(map[view]).classList.add('active');
+      document.querySelectorAll('.dummy-nav button[data-view]').forEach(b =>
+        b.classList.toggle('active', b.dataset.view === view));
     }
     showView('dashboard');
   </script>

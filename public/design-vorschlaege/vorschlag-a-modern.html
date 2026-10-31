@@ -8,278 +8,139 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background: #f0f4f8;
-      color: #1e293b;
-      min-height: 100vh;
+      background: #f0f4f8; color: #1e293b; min-height: 100vh; padding-top: 28px;
     }
-    /* ===== TOPBAR ===== */
     .topbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 2rem;
-      height: 64px;
-      background: #fff;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-      position: sticky;
-      top: 0;
-      z-index: 10;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0 2rem; height: 64px; background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08); position: sticky; top: 28px; z-index: 10;
     }
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      font-weight: 700;
-      font-size: 1.2rem;
-      color: #2563eb;
-    }
+    .logo { display: flex; align-items: center; gap: 0.6rem; font-weight: 700; font-size: 1.2rem; color: #2563eb; }
     .logo-icon {
-      width: 32px; height: 32px;
-      background: linear-gradient(135deg, #3b82f6, #6366f1);
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; background: linear-gradient(135deg, #3b82f6, #6366f1);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
       color: #fff; font-size: 1rem;
     }
-    .user-box { display: flex; align-items: center; gap: 1rem; }
+    .topbar nav { display: flex; gap: 0.75rem; align-items: center; }
+    .user-box { display: flex; align-items: center; gap: 0.75rem; }
     .user-avatar {
       width: 36px; height: 36px; border-radius: 50%;
-      background: linear-gradient(135deg, #818cf8, #6366f1);
-      color: #fff;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 600; font-size: 0.85rem;
+      background: linear-gradient(135deg, #818cf8, #6366f1); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.85rem;
     }
-    .btn-logout {
-      padding: 0.45rem 1rem;
-      background: transparent;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      color: #64748b;
-      cursor: pointer;
-      font-size: 0.875rem;
-    }
-    .btn-logout:hover { background: #f8fafc; }
-
-    /* ===== LAYOUT ===== */
     .main { max-width: 1000px; margin: 0 auto; padding: 2rem; }
     .page-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 0.3rem; }
     .page-sub { color: #64748b; margin-bottom: 1.5rem; }
-
-    /* ===== BUTTONS ===== */
     .btn-primary {
-      padding: 0.65rem 1.4rem;
-      background: linear-gradient(135deg, #3b82f6, #2563eb);
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      font-weight: 600;
-      cursor: pointer;
-      font-size: 0.9rem;
+      padding: 0.65rem 1.4rem; background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff;
+      border: none; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 0.9rem;
       box-shadow: 0 2px 8px rgba(37,99,235,0.3);
     }
     .btn-primary:hover { box-shadow: 0 4px 14px rgba(37,99,235,0.4); }
     .btn-secondary {
-      padding: 0.65rem 1.4rem;
-      background: #fff;
-      color: #475569;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      font-weight: 500;
-      cursor: pointer;
-      font-size: 0.9rem;
+      padding: 0.6rem 1.2rem; background: #fff; color: #475569; border: 1px solid #e2e8f0;
+      border-radius: 10px; font-weight: 500; cursor: pointer; font-size: 0.85rem;
     }
-
-    /* ===== AUTH ===== */
-    .auth-wrapper {
-      display: flex;
-      justify-content: center;
-      padding-top: 3rem;
-    }
+    .auth-wrapper { display: flex; justify-content: center; padding-top: 3rem; }
     .auth-card {
-      background: #fff;
-      border-radius: 16px;
-      padding: 2.5rem;
-      width: 100%;
-      max-width: 400px;
+      background: #fff; border-radius: 16px; padding: 2.5rem; width: 100%; max-width: 400px;
       box-shadow: 0 4px 24px rgba(0,0,0,0.06);
     }
     .auth-card h2 { font-size: 1.3rem; margin-bottom: 1.2rem; }
-    .auth-tabs {
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
-      background: #f1f5f9;
-      padding: 0.3rem;
-      border-radius: 10px;
-    }
+    .auth-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: #f1f5f9; padding: 0.3rem; border-radius: 10px; }
     .auth-tab {
-      flex: 1;
-      padding: 0.55rem;
-      text-align: center;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: #64748b;
-      cursor: pointer;
+      flex: 1; padding: 0.55rem; text-align: center; border-radius: 8px; font-size: 0.875rem;
+      font-weight: 600; color: #64748b; cursor: pointer;
     }
     .auth-tab.active { background: #fff; color: #2563eb; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-
-    /* ===== FORMS ===== */
     .form-group { margin-bottom: 1rem; }
-    .form-group label {
-      display: block;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: #475569;
-      margin-bottom: 0.35rem;
-    }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: #475569; margin-bottom: 0.35rem; }
     input, textarea, select {
-      width: 100%;
-      padding: 0.7rem 0.9rem;
-      border: 1.5px solid #e2e8f0;
-      border-radius: 10px;
-      font-size: 0.9rem;
-      background: #f8fafc;
-      transition: border-color 0.15s;
+      width: 100%; padding: 0.7rem 0.9rem; border: 1.5px solid #e2e8f0; border-radius: 10px;
+      font-size: 0.9rem; background: #f8fafc; transition: border-color 0.15s; color: #1e293b;
     }
-    input:focus, textarea:focus, select:focus {
-      outline: none;
-      border-color: #3b82f6;
-      background: #fff;
+    input:focus, textarea:focus, select:focus { outline: none; border-color: #3b82f6; background: #fff; }
+    form.card-form, #new-project-form, #profile-form, #user-form {
+      display: flex; flex-direction: column; gap: 1rem; background: #fff; border-radius: 14px;
+      padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
     }
-
-    /* ===== PROJECT CARDS ===== */
-    .dashboard-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
-    }
-    .project-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1.2rem;
-    }
+    .dashboard-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.2rem; }
     .project-card {
-      background: #fff;
-      border-radius: 14px;
-      padding: 1.5rem;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-      cursor: pointer;
-      transition: box-shadow 0.2s, transform 0.2s;
-      border: 1px solid #f1f5f9;
+      background: #fff; border-radius: 14px; padding: 1.5rem; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+      cursor: pointer; transition: box-shadow 0.2s, transform 0.2s; border: 1px solid #f1f5f9;
     }
-    .project-card:hover {
-      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-      transform: translateY(-2px);
-    }
+    .project-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.08); transform: translateY(-2px); }
     .project-card h3 { font-size: 1.05rem; margin-bottom: 0.4rem; }
     .project-card p { font-size: 0.85rem; color: #94a3b8; margin-bottom: 1rem; }
-    .project-meta {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
+    .project-meta { display: flex; justify-content: space-between; align-items: center; }
     .task-count { font-size: 0.8rem; color: #64748b; }
-
-    /* ===== BADGES ===== */
-    .badge {
-      padding: 0.3rem 0.75rem;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
+    .badge { padding: 0.3rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
     .badge-active { background: #dcfce7; color: #16a34a; }
     .badge-planning { background: #fef3c7; color: #d97706; }
     .badge-done { background: #dbeafe; color: #2563eb; }
     .badge-todo { background: #f1f5f9; color: #64748b; }
     .badge-in_progress { background: #ffedd5; color: #ea580c; }
     .badge-review { background: #ede9fe; color: #7c3aed; }
-
-    /* ===== TASK LIST ===== */
     .task-list { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; margin-top: 1rem; }
     .task-item {
-      background: #fff;
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      background: #fff; border-radius: 12px; padding: 1rem 1.25rem; display: flex;
+      justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
       border: 1px solid #f1f5f9;
     }
     .back-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      color: #64748b;
-      cursor: pointer;
-      font-size: 0.875rem;
-      margin-bottom: 1rem;
-      background: none; border: none;
+      display: inline-flex; align-items: center; gap: 0.4rem; color: #64748b; cursor: pointer;
+      font-size: 0.875rem; margin-bottom: 1rem; background: none; border: none;
     }
     .back-btn:hover { color: #2563eb; }
-
-    /* ===== DUMMY NAV ===== */
+    #user-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+    #user-table th, #user-table td { text-align: left; padding: 0.85rem 1.1rem; border-bottom: 1px solid #f1f5f9; font-size: 0.875rem; }
+    #user-table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; font-weight: 600; background: #f8fafc; }
+    #user-table td button { margin-right: 0.4rem; padding: 0.35rem 0.7rem; font-size: 0.78rem; border-radius: 8px; }
+    #user-table td button:last-child { background: #dc2626; }
+    .form-row { display: flex; gap: 0.75rem; }
+    .form-row input { flex: 1; }
     .dummy-nav {
-      position: fixed;
-      bottom: 1.5rem;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #1e293b;
-      border-radius: 999px;
-      padding: 0.5rem 1rem;
-      display: flex;
-      gap: 0.5rem;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-      z-index: 100;
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+      background: #1e293b; border-radius: 999px; padding: 0.5rem 1rem; display: flex; gap: 0.5rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3); z-index: 100; flex-wrap: wrap; justify-content: center; max-width: 95vw;
     }
     .dummy-nav button {
-      padding: 0.45rem 1rem;
-      border: none;
-      border-radius: 999px;
-      background: transparent;
-      color: #94a3b8;
-      cursor: pointer;
-      font-size: 0.8rem;
-      font-weight: 500;
+      padding: 0.45rem 0.85rem; border: none; border-radius: 999px; background: transparent;
+      color: #94a3b8; cursor: pointer; font-size: 0.75rem; font-weight: 500; white-space: nowrap;
     }
-    .dummy-nav button.active {
-      background: #3b82f6;
-      color: #fff;
-    }
+    .dummy-nav button.active { background: #3b82f6; color: #fff; }
+    .dummy-nav a { padding: 0.45rem 0.85rem; color: #94a3b8; text-decoration: none; font-size: 0.75rem; white-space: nowrap; }
     .dummy-banner {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      background: #fbbf24;
-      color: #78350f;
-      text-align: center;
-      padding: 0.3rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      z-index: 200;
+      position: fixed; top: 0; left: 0; right: 0; background: #3b82f6; color: #fff;
+      text-align: center; padding: 0.3rem; font-size: 0.75rem; font-weight: 600; z-index: 200;
     }
-    body { padding-top: 28px; }
+    #profile-form label, #user-form label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8rem; font-weight: 600; color: #475569; }
+    .section-label { font-size: 0.95rem; font-weight: 600; color: #334155; margin-bottom: 0.75rem; }
   </style>
 </head>
 <body>
-  <div class="dummy-banner">🎨 KLICKDUMMY – Vorschlag A: Modern Dashboard</div>
+  <div class="dummy-banner">🎨 KLICKDUMMY – Vorschlag A: Modern Dashboard (5 Ansichten)</div>
 
-  <!-- ===== TOPBAR (immer sichtbar außer bei Login) ===== -->
   <header class="topbar" id="topbar" hidden>
     <div class="logo">
       <div class="logo-icon">PP</div>
       <span>Projektverwaltung</span>
     </div>
-    <div class="user-box">
-      <div class="user-avatar">MM</div>
-      <span>Max Mustermann</span>
-      <button class="btn-logout">Abmelden</button>
-    </div>
+    <nav>
+      <div class="user-box">
+        <div class="user-avatar">MM</div>
+        <span style="font-size:0.85rem;">Max Mustermann</span>
+        <button class="btn-secondary">Profil</button>
+        <button class="btn-secondary">Admin</button>
+        <button class="btn-secondary">Abmelden</button>
+      </div>
+    </nav>
   </header>
 
   <main class="main">
 
-    <!-- ===== ANSICHT 1: LOGIN ===== -->
+    <!-- 1: LOGIN -->
     <section id="view-auth">
       <div class="auth-wrapper">
         <div class="auth-card">
@@ -291,7 +152,7 @@
             <div class="auth-tab active">Anmelden</div>
             <div class="auth-tab">Registrieren</div>
           </div>
-          <form onsubmit="return false">
+          <form class="card-form" style="background:transparent;box-shadow:none;padding:0;margin:0;" onsubmit="return false">
             <div class="form-group">
               <label>E-Mail</label>
               <input type="email" placeholder="max@beispiel.de" value="max@beispiel.de">
@@ -300,73 +161,52 @@
               <label>Passwort</label>
               <input type="password" placeholder="••••••••" value="password">
             </div>
-            <button class="btn-primary" style="width:100%; margin-top:0.5rem;">Einloggen</button>
+            <button class="btn-primary" style="width:100%;">Einloggen</button>
           </form>
-          <p style="text-align:center; color:#94a3b8; font-size:0.8rem; margin-top:1rem;">
-            Noch kein Konto? <span style="color:#2563eb; cursor:pointer;">Registrieren</span>
-          </p>
         </div>
       </div>
     </section>
 
-    <!-- ===== ANSICHT 2: DASHBOARD ===== -->
+    <!-- 2: DASHBOARD -->
     <section id="view-dashboard" hidden>
       <div class="dashboard-header">
         <div>
           <div class="page-title">Meine Projekte</div>
           <div class="page-sub">3 aktive Projekte</div>
         </div>
-        <button class="btn-primary">+ Neues Projekt</button>
+        <button class="btn-primary" onclick="document.getElementById('new-project-form').hidden = !document.getElementById('new-project-form').hidden;">+ Neues Projekt</button>
       </div>
-
-      <!-- Neues Projekt Formular (initial versteckt) -->
-      <div id="new-project-form" hidden style="background:#fff; border-radius:14px; padding:1.5rem; margin-bottom:1.5rem; box-shadow:0 1px 4px rgba(0,0,0,0.05);">
-        <h3 style="margin-bottom:1rem;">Neues Projekt anlegen</h3>
-        <div class="form-group">
-          <label>Projektname</label>
-          <input type="text" placeholder="z.B. Website-Relaunch">
-        </div>
-        <div class="form-group">
-          <label>Beschreibung</label>
-          <textarea rows="3" placeholder="Kurze Beschreibung des Projekts..."></textarea>
-        </div>
+      <div id="new-project-form" hidden>
+        <h3 style="font-size:1.05rem;">Neues Projekt anlegen</h3>
+        <div class="form-group"><label>Projektname</label><input type="text" placeholder="z.B. Website-Relaunch"></div>
+        <div class="form-group"><label>Beschreibung</label><textarea rows="3" placeholder="Kurze Beschreibung..."></textarea></div>
         <div style="display:flex; gap:0.75rem;">
           <button class="btn-primary">Anlegen</button>
-          <button class="btn-secondary">Abbrechen</button>
+          <button class="btn-secondary" onclick="document.getElementById('new-project-form').hidden = true;">Abbrechen</button>
         </div>
       </div>
-
       <div class="project-grid">
-        <div class="project-card">
+        <div class="project-card" onclick="showView('detail')">
           <h3>🌐 Website-Relaunch</h3>
           <p>Neue Firmenwebsite mit CMS und Blog</p>
-          <div class="project-meta">
-            <span class="task-count">12 Tasks</span>
-            <span class="badge badge-active">Aktiv</span>
-          </div>
+          <div class="project-meta"><span class="task-count">12 Tasks</span><span class="badge badge-active">Aktiv</span></div>
         </div>
-        <div class="project-card">
+        <div class="project-card" onclick="showView('detail')">
           <h3>📱 Mobile App</h3>
           <p>iOS &amp; Android App für Kundenbindung</p>
-          <div class="project-meta">
-            <span class="task-count">8 Tasks</span>
-            <span class="badge badge-planning">Planung</span>
-          </div>
+          <div class="project-meta"><span class="task-count">8 Tasks</span><span class="badge badge-planning">Planung</span></div>
         </div>
-        <div class="project-card">
+        <div class="project-card" onclick="showView('detail')">
           <h3>🔧 API-Migration</h3>
           <p>Umstellung auf REST API v2</p>
-          <div class="project-meta">
-            <span class="task-count">5 Tasks</span>
-            <span class="badge badge-done">Abgeschlossen</span>
-          </div>
+          <div class="project-meta"><span class="task-count">5 Tasks</span><span class="badge badge-done">Abgeschlossen</span></div>
         </div>
       </div>
     </section>
 
-    <!-- ===== ANSICHT 3: PROJEKTDETAIL ===== -->
+    <!-- 3: DETAIL -->
     <section id="view-detail" hidden>
-      <button class="back-btn">← Zurück zur Übersicht</button>
+      <button class="back-btn" onclick="showView('dashboard')">← Zurück zur Übersicht</button>
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1.5rem;">
         <div>
           <div class="page-title">🌐 Website-Relaunch</div>
@@ -374,61 +214,87 @@
         </div>
         <span class="badge badge-active">Aktiv</span>
       </div>
-
-      <h3 style="font-size:1rem; margin-bottom:0.75rem;">Tasks</h3>
-
-      <!-- Task hinzufügen -->
-      <form onsubmit="return false" style="display:flex; gap:0.75rem; margin-bottom:1rem;">
-        <input type="text" placeholder="Neuen Task eingeben..." style="flex:1;">
+      <div class="section-label">Tasks</div>
+      <form class="form-row" style="margin-bottom:1rem;" onsubmit="return false">
+        <input type="text" placeholder="Neuen Task eingeben...">
         <button class="btn-primary">+ Hinzufügen</button>
       </form>
-
       <ul class="task-list">
-        <li class="task-item">
-          <span>Design-Mockups erstellen</span>
-          <span class="badge badge-done">done</span>
-        </li>
-        <li class="task-item">
-          <span>Startseite entwickeln</span>
-          <span class="badge badge-in_progress">in_progress</span>
-        </li>
-        <li class="task-item">
-          <span>CMS integrieren</span>
-          <span class="badge badge-review">review</span>
-        </li>
-        <li class="task-item">
-          <span>Kontaktformular bauen</span>
-          <span class="badge badge-todo">todo</span>
-        </li>
-        <li class="task-item">
-          <span>SEO-Optimierung</span>
-          <span class="badge badge-todo">todo</span>
-        </li>
+        <li class="task-item"><span>Design-Mockups erstellen</span><span class="badge badge-done">done</span></li>
+        <li class="task-item"><span>Startseite entwickeln</span><span class="badge badge-in_progress">in_progress</span></li>
+        <li class="task-item"><span>CMS integrieren</span><span class="badge badge-review">review</span></li>
+        <li class="task-item"><span>Kontaktformular bauen</span><span class="badge badge-todo">todo</span></li>
+        <li class="task-item"><span>SEO-Optimierung</span><span class="badge badge-todo">todo</span></li>
       </ul>
+    </section>
+
+    <!-- 4: PROFIL -->
+    <section id="view-profile" hidden>
+      <button class="back-btn" onclick="showView('dashboard')">← Zurück</button>
+      <div class="page-title" style="margin-bottom:1.5rem;">Profil bearbeiten</div>
+      <form id="profile-form" onsubmit="return false">
+        <div class="form-group"><label>Name</label><input type="text" value="Max Mustermann"></div>
+        <div class="form-group"><label>E-Mail</label><input type="email" value="max@beispiel.de"></div>
+        <div class="section-label">Passwort ändern</div>
+        <div class="form-group"><label>Aktuelles Passwort</label><input type="password" placeholder="••••••••"></div>
+        <div class="form-group"><label>Neues Passwort</label><input type="password" placeholder="Neues Passwort"></div>
+        <button class="btn-primary" style="align-self:flex-start;">Speichern</button>
+      </form>
+    </section>
+
+    <!-- 5: ADMIN -->
+    <section id="view-admin" hidden>
+      <button class="back-btn" onclick="showView('dashboard')">← Zurück</button>
+      <div class="dashboard-header">
+        <div class="page-title">Benutzerverwaltung</div>
+        <button class="btn-primary" onclick="document.getElementById('user-form').hidden = !document.getElementById('user-form').hidden;">+ Neuer Benutzer</button>
+      </div>
+      <form id="user-form" hidden onsubmit="return false">
+        <div class="form-group"><label>Name</label><input type="text" placeholder="Name"></div>
+        <div class="form-group"><label>E-Mail</label><input type="email" placeholder="E-Mail"></div>
+        <div class="form-group"><label>Passwort</label><input type="password" placeholder="Passwort"></div>
+        <div class="form-group"><label>Rolle</label>
+          <select>
+            <option>Admin</option><option>Projektmanager</option><option selected>Entwickler</option><option>Beobachter</option>
+          </select>
+        </div>
+        <label style="display:flex; flex-direction:row; align-items:center; gap:0.5rem; font-size:0.85rem; color:#475569;"><input type="checkbox" checked style="width:auto;"> Aktiv</label>
+        <div style="display:flex; gap:0.75rem;">
+          <button class="btn-primary">Speichern</button>
+          <button class="btn-secondary" type="button" onclick="document.getElementById('user-form').hidden = true;">Abbrechen</button>
+        </div>
+      </form>
+      <table id="user-table">
+        <thead><tr><th>Name</th><th>E-Mail</th><th>Rolle</th><th>Status</th><th>Aktionen</th></tr></thead>
+        <tbody>
+          <tr><td>Max Mustermann</td><td>max@beispiel.de</td><td><span class="badge badge-done">Admin</span></td><td>aktiv</td><td><button class="btn-secondary">Bearbeiten</button><button class="btn-secondary">Deaktivieren</button><button>Löschen</button></td></tr>
+          <tr><td>Erika Musterfrau</td><td>erika@beispiel.de</td><td><span class="badge badge-in_progress">Projektmanager</span></td><td>aktiv</td><td><button class="btn-secondary">Bearbeiten</button><button class="btn-secondary">Deaktivieren</button><button>Löschen</button></td></tr>
+          <tr><td>Tom Tester</td><td>tom@beispiel.de</td><td><span class="badge badge-review">Entwickler</span></td><td>deaktiviert</td><td><button class="btn-secondary">Bearbeiten</button><button class="btn-secondary">Aktivieren</button><button>Löschen</button></td></tr>
+        </tbody>
+      </table>
     </section>
 
   </main>
 
-  <!-- ===== DUMMY NAVIGATION ===== -->
   <nav class="dummy-nav">
-    <button onclick="showView('auth')" id="nav-auth">🔑 Login</button>
-    <button onclick="showView('dashboard')" id="nav-dashboard" class="active">📊 Dashboard</button>
-    <button onclick="showView('detail')" id="nav-detail">📋 Projektdetail</button>
-    <button onclick="document.getElementById('new-project-form').hidden = !document.getElementById('new-project-form').hidden; showView('dashboard')">➕ Formular</button>
-    <a href="index.html" style="padding:0.45rem 1rem; color:#94a3b8; text-decoration:none; font-size:0.8rem;">← Übersicht</a>
+    <button onclick="showView('auth')" data-view="auth">🔑 Login</button>
+    <button onclick="showView('dashboard')" data-view="dashboard" class="active">📊 Dashboard</button>
+    <button onclick="showView('detail')" data-view="detail">📋 Detail</button>
+    <button onclick="showView('profile')" data-view="profile">👤 Profil</button>
+    <button onclick="showView('admin')" data-view="admin">🛠 Admin</button>
+    <a href="index.html">← Übersicht</a>
   </nav>
 
   <script>
     function showView(view) {
-      document.getElementById('view-auth').hidden = view !== 'auth';
-      document.getElementById('view-dashboard').hidden = view !== 'dashboard';
-      document.getElementById('view-detail').hidden = view !== 'detail';
+      for (const v of ['auth', 'dashboard', 'detail', 'profile', 'admin']) {
+        const el = document.getElementById('view-' + v);
+        if (el) el.hidden = v !== view;
+      }
       document.getElementById('topbar').hidden = view === 'auth';
-      document.querySelectorAll('.dummy-nav button').forEach(b => b.classList.remove('active'));
-      const map = { auth: 'nav-auth', dashboard: 'nav-dashboard', detail: 'nav-detail' };
-      if (map[view]) document.getElementById(map[view]).classList.add('active');
+      document.querySelectorAll('.dummy-nav button[data-view]').forEach(b =>
+        b.classList.toggle('active', b.dataset.view === view));
     }
-    // Start auf Dashboard
     showView('dashboard');
   </script>
 </body>
