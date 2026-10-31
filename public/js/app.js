@@ -2723,31 +2723,58 @@ function bindProjectTrackerSettingsEvents() {
 
   // Form submit (save)
   bind('submit', async (e) => {
-    if (e.target.id === 'project-tracker-settings-form') {
+    if (e.target.id === 'admin-project-form') {
       e.preventDefault();
-      if (!state.currentProject) return;
       const fd = new FormData(e.target);
-      const baseUrl = fd.get('base_url');
-      const accessToken = fd.get('access_token');
-      const msgEl = $('#project-tracker-settings-msg');
-      if (!baseUrl || !accessToken) {
-        if (msgEl) { msgEl.textContent = 'API-URL und Access Token sind erforderlich.'; msgEl.style.color = 'var(--danger)'; }
-        return;
+      const id = fd.get('id');
+      const trackerType = fd.get('issue_tracker_type') || 'none';
+      const body = {
+        name: fd.get('name'),
+        description: fd.get('description') || null,
+        status: fd.get('status'),
+        owner_id: Number(fd.get('owner_id')),
+        issue_tracker_type: trackerType,
+      };
+      if (trackerType === 'gitlab') {
+        const gid = fd.get('gitlab_project_id');
+        body.gitlab_project_id = gid ? Number(gid) : null;
+        body.github_repo = null;
+      } else if (trackerType === 'github') {
+        body.github_repo = fd.get('github_repo') || null;
+        body.gitlab_project_id = null;
+      } else {
+        body.gitlab_project_id = null;
+        body.github_repo = null;
       }
+      // Verbindungsdaten immer mitsenden (auch leer = löschen)
+      const connToken = fd.get('conn_access_token');
+      const connBaseUrl = fd.get('conn_base_url');
+      const connSa = fd.get('conn_service_account') || null;
       try {
-        await api(`/api/projects/${state.currentProject.id}/tracker/settings`, {
-          method: 'PUT',
-          body: {
-            base_url: baseUrl,
-            access_token: accessToken,
-            service_account_username: fd.get('service_account_username') || null,
-          },
-        });
-        if (msgEl) { msgEl.textContent = '\u2705 Gespeichert'; msgEl.style.color = 'var(--success)'; }
-        e.target.elements['access_token'].value = '';
-        await loadProjectTrackerSettings(state.currentProject.id);
+        // 1. Projekt-Daten inkl. Tracker-Typ speichern
+        await api(`/api/admin/projects/${id}`, { method: 'PUT', body });
+        // 2. Verbindungsdaten immer speichern (auch wenn Token leer -> alte löschen)
+        if (trackerType !== 'none' && connBaseUrl) {
+          await api(`/api/admin/projects/${id}/tracker/settings`, {
+            method: 'PUT',
+            body: {
+              base_url: connBaseUrl,
+              access_token: connToken || '',
+              service_account_username: connSa,
+            },
+          });
+        } else if (trackerType === 'none') {
+          // Tracker deaktiviert -> projekt-spezifische Settings löschen
+          try { await api(`/api/admin/projects/${id}/tracker/settings`, { method: 'DELETE' }); } catch (e) {}
+        }
+        // Maske bleibt offen – Einstellungen werden direkt neu geladen
+        const msgEl = $('#admin-project-conn-msg');
+        if (msgEl) { msgEl.textContent = '✅ Gespeichert'; msgEl.style.color = 'var(--success, #4caf50)'; }
+        await loadAdminProjectConnectionSettings(id);
+        await loadAdminProjects();
       } catch (err) {
-        if (msgEl) { msgEl.textContent = err.message; msgEl.style.color = 'var(--danger)'; }
+        const msgEl = $('#admin-project-conn-msg');
+        if (msgEl) { msgEl.textContent = '❌ ' + err.message; msgEl.style.color = 'var(--danger, #f44336)'; }
       }
     }
   });
@@ -2842,7 +2869,7 @@ async function loadAdminProjectConnectionSettings(projectId) {
   const saInput = $('#admin-project-conn-sa');
   const tokenInput = $('#admin-project-conn-access-token');
   try {
-    const s = await api(`/api/projects/${projectId}/tracker/settings`);
+    const s = await api(`/api/admin/projects/${projectId}/tracker/settings`);
     if (s.has_project_settings) {
       if (baseUrlInput) baseUrlInput.value = s.base_url || '';
       if (saInput) saInput.value = s.service_account_username || '';
@@ -2885,7 +2912,7 @@ bind('#admin-project-test-conn-btn', async () => {
     return;
   }
   try {
-    const r = await api(`/api/projects/${projectId}/tracker/settings/test`, {
+    const r = await api(`/api/admin/projects/${projectId}/tracker/settings/test`, {
       method: 'POST',
       body: { type: trackerType, base_url: connBaseUrl, access_token: connToken, service_account_username: connSa || null },
     });

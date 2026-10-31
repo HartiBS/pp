@@ -2,6 +2,9 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../config/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const issueTracker = require('../utils/issueTracker');
+const gitlab = require('../utils/gitlab');
+const github = require('../utils/github');
 const roles = require('../utils/roles');
 const customFields = require('../utils/customFields');
 
@@ -316,19 +319,29 @@ router.put('/projects/:id', async (req, res) => {
     if (issue_tracker_type !== undefined && !['none', 'gitlab', 'github'].includes(issue_tracker_type)) {
       return res.status(400).json({ error: 'Ungültiger Tracker-Typ' });
     }
+    // Nur Felder aktualisieren, die tatsächlich im Request sind (undefined = nicht ändern)
+    const fields = [];
+    const values = [];
+    let idx = 1;
+    const add = (col, val) => {
+      if (val !== undefined) {
+        fields.push(`${col} = $${idx}`);
+        values.push(val);
+        idx++;
+      }
+    };
+    add('name', name);
+    add('description', description);
+    add('status', status);
+    add('owner_id', owner_id);
+    add('issue_tracker_type', issue_tracker_type);
+    add('gitlab_project_id', gitlab_project_id);
+    add('github_repo', github_repo);
+    fields.push('updated_at = NOW()');
+    values.push(req.params.id);
     const { rows } = await db.query(
-      `UPDATE projects
-       SET name = COALESCE($1, name),
-           description = COALESCE($2, description),
-           status = COALESCE($3, status),
-           owner_id = COALESCE($4, owner_id),
-           issue_tracker_type = COALESCE($5, issue_tracker_type),
-           gitlab_project_id = COALESCE($6, gitlab_project_id),
-           github_repo = COALESCE($7, github_repo),
-           updated_at = NOW()
-       WHERE id = $8
-       RETURNING *`,
-      [name, description, status, owner_id, issue_tracker_type, gitlab_project_id, github_repo, req.params.id]
+      `UPDATE projects SET ${fields.join(', ')} WHERE id = $${idx} RETURNING *`,
+      values
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Projekt nicht gefunden' });
@@ -401,6 +414,103 @@ router.get('/my-projects', requireRole('admin', 'projektmanager'), async (req, r
       rows = result.rows;
     }
     res.json({ projects: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+
+
+// GET: Pro-Projekt Tracker-Settings (Admin-Version ohne Projekt-Rolle)
+router.get('/projects/:id/tracker/settings', async (req, res) => {
+  try {
+    const tracker = await issueTracker.getProjectTracker(req.params.id);
+    if (!tracker) return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    const type = tracker.issue_tracker_type || 'none';
+    const settings = await issueTracker.getProjectTrackerSettings(req.params.id, type);
+    res.json({
+      type,
+      has_project_settings: !!settings,
+      base_url: settings ? settings.base_url : null,
+      service_account_username: settings ? settings.service_account_username : null,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// ===== Admin: Pro-Projekt Tracker-Settings (ohne Projekt-Rolle, nur globale Admin-Rolle) =====
+
+// POST: Verbindungstest (Admin-Version ohne Projekt-Rolle)
+router.post('/projects/:id/tracker/settings/test', async (req, res) => {
+  const startedAt = Date.now();
+  try {
+    const tracker = await issueTracker.getProjectTracker(req.params.id);
+    if (!tracker) return res.status(404).json({ ok: false, error: 'Projekt nicht gefunden', http_status: 404 });
+    const type = req.body.type || tracker.issue_tracker_type || 'none';
+    const adhoc = (req.body.base_url && req.body.access_token)
+      ? { base_url: req.body.base_url, access_token: req.body.access_token, service_account_username: req.body.service_account_username || null }
+      : null;
+    const projectSettings = adhoc || issueTracker.getEffectiveSettings(tracker);
+    const opts = { projectSettings };
+    const baseUrl = projectSettings ? projectSettings.base_url : (type === 'github' ? 'https://api.github.com' : null);
+    if (type === 'gitlab') {
+      const user = await gitlab.gitlabRequest('/user', opts);
+      return res.json({
+        ok: true, service: 'gitlab', http_status: 200,
+        used_project_settings: !!projectSettings, tested_type: type, base_url: baseUrl,
+        user: { id: user.id, username: user.username, name: user.name, state: user.state, web_url: user.web_url },
+        response_time_ms: Date.now() - startedAt,
+      });
+    }
+    if (type === 'github') {
+      const user = await github.testConnection(opts);
+      return res.json({
+        ok: true, service: 'github', http_status: 200,
+        used_project_settings: !!projectSettings, tested_type: type, base_url: baseUrl,
+        user: { id: user.id, username: user.login || user.username, name: user.name, type: user.type, web_url: user.html_url },
+        response_time_ms: Date.now() - startedAt,
+      });
+    }
+    return res.status(400).json({ ok: false, error: 'Kein Tracker-Typ angegeben (none). Wähle GitLab oder GitHub im Formular.', http_status: 400, tested_type: type });
+  } catch (err) {
+    res.status(err.status || 502).json({
+      ok: false, error: err.message, http_status: err.status || 502, response_time_ms: Date.now() - startedAt,
+    });
+  }
+});
+
+router.put('/projects/:id/tracker/settings', async (req, res) => {
+  const { base_url, access_token, service_account_username } = req.body;
+  if (!base_url || !access_token) {
+    return res.status(400).json({ error: 'base_url und access_token sind erforderlich' });
+  }
+  try {
+    const tracker = await issueTracker.getProjectTracker(req.params.id);
+    if (!tracker) return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    const type = tracker.issue_tracker_type;
+    if (type === 'gitlab') {
+      await issueTracker.saveProjectGitLabSettings(req.params.id, { base_url, access_token, service_account_username });
+    } else if (type === 'github') {
+      await issueTracker.saveProjectGitHubSettings(req.params.id, { base_url, access_token, service_account_username });
+    } else {
+      return res.status(400).json({ error: 'Projekt hat keinen Tracker-Typ' });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+router.delete('/projects/:id/tracker/settings', async (req, res) => {
+  try {
+    const tracker = await issueTracker.getProjectTracker(req.params.id);
+    if (!tracker) return res.status(404).json({ error: 'Projekt nicht gefunden' });
+    await issueTracker.deleteProjectTrackerSettings(req.params.id, tracker.issue_tracker_type);
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
