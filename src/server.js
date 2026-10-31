@@ -12,6 +12,7 @@ const syncRoutes = require('./routes/sync');
 const notificationRoutes = require('./routes/notifications');
 const { loadUser } = require('./middleware/auth');
 const { generateCsrfToken, requireCsrf } = require('./middleware/csrf');
+const { version } = require('../package.json');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -56,6 +57,9 @@ app.use('/api/sync', syncRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 app.get('/health', (req, res) => res.json({ ok: true }));
+
+// #110: Version der Applikation (z. B. für Footer-Anzeige)
+app.get('/api/version', (req, res) => res.json({ version }));
 
 app.use((err, req, res, next) => {
   console.error(err);
