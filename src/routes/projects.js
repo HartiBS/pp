@@ -4,6 +4,7 @@ const { requireAuth } = require('../middleware/auth');
 const { loadProjectRole, requireProjectPermission, PROJECT_ROLES } = require('../utils/permissions');
 const notifications = require('../utils/notifications');
 const gitlab = require('../utils/gitlab');
+const github = require('../utils/github');
 const taskHistory = require('../utils/taskHistory');
 const taskWatchers = require('../utils/taskWatchers');
 const taskComments = require('../utils/taskComments');
