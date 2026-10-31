@@ -1,36 +1,35 @@
 # 🎨 Designvorschläge – Klickdummys
 
-Diese Dateien sind Design-Prototypen für die PP Projektverwaltung.
+Interaktive HTML-Prototypen für die PP Projektverwaltung. Jeder Vorschlag zeigt **alle 5 Ansichten** des aktuellen Funktionsumfangs.
 
 ## Zugriff
 
-Sobald der Server läuft, erreichst du die Vorschläge unter:
+Sobald der Server läuft:
 
 | Seite | URL |
 |-------|-----|
-| **Übersicht** (alle 3 Vorschläge) | `http://localhost:3000/design-vorschlaege/` |
+| **Übersicht** | `http://localhost:3000/design-vorschlaege/` |
 | Vorschlag A: Modern Dashboard | `http://localhost:3000/design-vorschlaege/vorschlag-a-modern.html` |
-| Vorschlag B: Dark Professional | `http://localhost:3000/design-vorschlaege/vorschlag-b-dark.html` |
+| Vorschlag B: Dark Professional ⭐ *angewendet* | `http://localhost:3000/design-vorschlaege/vorschlag-b-dark.html` |
 | Vorschlag C: Warm Minimal | `http://localhost:3000/design-vorschlaege/vorschlag-c-minimal.html` |
 
-> **Hinweis:** Falls der Server in Docker läuft, starte ihn neu damit die neuen Dateien geladen werden:
-> ```bash
-> cd docker && docker-compose restart app
-> ```
+> **Docker:** `cd docker && docker-compose restart app`
+
+## Ansichten pro Dummy
+
+Jeder Klickdummy enthält unten eine Navigationsleiste mit 5 Ansichten:
+
+1. 🔑 **Login / Registrieren** – Auth-Card mit Tabs
+2. 📊 **Dashboard** – Projektliste + "Neues Projekt"-Formular
+3. 📋 **Projektdetail** – Task-Liste mit Status-Badges
+4. 👤 **Profil** – Name, E-Mail, Passwort ändern
+5. 🛠 **Admin** – Benutzerverwaltung als Tabelle
+
+> **Vorschlag B** hat zusätzlich einen **☀️/🌙 Theme-Toggle** in der Topbar (Dark ↔ Light Mode).
 
 ## Direkt im Browser öffnen (ohne Server)
 
-Du kannst die HTML-Dateien auch direkt im Browser öffnen:
 - `public/design-vorschlaege/index.html`
 - `public/design-vorschlaege/vorschlag-a-modern.html`
 - `public/design-vorschlaege/vorschlag-b-dark.html`
 - `public/design-vorschlaege/vorschlag-c-minimal.html`
-
-## Inhalt
-
-Jeder Vorschlag zeigt 3 Ansichten als Klickdummy:
-1. **Login/Registrierung**
-2. **Dashboard** (Projektübersicht)
-3. **Projektdetail** (Task-Liste)
-
-Unten rechts gibt es eine Navigationsleiste zum Umschalten.
