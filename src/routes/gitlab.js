@@ -162,9 +162,12 @@ router.post('/projects/:id/issues', loadProjectRole, requireProjectPermission('c
 });
 
 router.put('/projects/:id/issues/:iid', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
-  const { title, description, state_event, auto_sync } = req.body;
+  const { title, description, state_event, labels, assignee_id, auto_sync } = req.body;
   if (state_event && !['close', 'reopen'].includes(state_event)) {
     return res.status(400).json({ error: "state_event muss 'close' oder 'reopen' sein" });
+  }
+  if (labels !== undefined && !Array.isArray(labels)) {
+    return res.status(400).json({ error: 'labels muss ein Array sein' });
   }
   try {
     const project = await db.query(
@@ -190,7 +193,7 @@ router.put('/projects/:id/issues/:iid', loadProjectRole, requireProjectPermissio
     let updated;
     if (pushToTracker) {
       updated = await gitlab.updateGitLabIssue(project.rows[0].gitlab_project_id, req.params.iid, {
-        title, description, state_event,
+        title, description, state_event, labels, assignee_id,
       });
     } else {
       updated = {
@@ -377,6 +380,23 @@ router.post('/projects/:id/milestones/sync', loadProjectRole, requireProjectPerm
     }
     const milestones = await gitlab.syncProjectMilestones(req.params.id, project.rows[0].gitlab_project_id);
     res.json({ milestones });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+router.get('/projects/:id/labels', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const project = await db.query(
+      'SELECT gitlab_project_id FROM projects WHERE id = $1',
+      [req.params.id]
+    );
+    if (!project.rows.length || !project.rows[0].gitlab_project_id) {
+      return res.status(400).json({ error: 'Kein GitLab-Projekt mit diesem Projekt verknüpft' });
+    }
+    const labels = await gitlab.listGitLabLabels(project.rows[0].gitlab_project_id);
+    res.json({ labels: (labels || []).map(l => ({ name: l.name, color: l.color || null })) });
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message });

@@ -1,4 +1,4 @@
-const state = { user: null, currentProject: null, currentProjectCustomFieldDefs: [] };
+const state = { user: null, currentProject: null, currentProjectCustomFieldDefs: [], currentGitLabIssue: null, currentGitLabIssueRaw: null, trackerLabels: [], trackerUsers: [] };
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -905,6 +905,81 @@ function renderGitLabIssueMeta(fields, raw) {
   }
 }
 
+function trackerType() {
+  const t = state.currentProject && state.currentProject.issue_tracker_type;
+  if (t === 'github') return 'github';
+  if (t === 'gitlab') return 'gitlab';
+  return 'none';
+}
+
+async function loadTrackerOptions() {
+  state.trackerLabels = [];
+  state.trackerUsers = [];
+  const projectId = state.currentProject && state.currentProject.id;
+  if (!projectId || trackerType() === 'none') return;
+  const base = trackerType() === 'github' ? '/api/github' : '/api/gitlab';
+  try {
+    const { labels } = await api(`${base}/projects/${projectId}/labels`);
+    state.trackerLabels = labels || [];
+  } catch (err) {
+    console.error('Tracker-Labels konnten nicht geladen werden:', err.message);
+  }
+  try {
+    const usersKey = trackerType() === 'github' ? 'github_users' : 'gitlab_users';
+    const data = await api(`${base}/projects/${projectId}/${trackerType() === 'github' ? 'github-users' : 'gitlab-users'}`);
+    state.trackerUsers = data[usersKey] || [];
+  } catch (err) {
+    console.error('Tracker-Benutzer konnten nicht geladen werden:', err.message);
+  }
+}
+
+function giCurrentLabelNames() {
+  const raw = state.currentGitLabIssueRaw;
+  if (Array.isArray(raw && raw.labels)) {
+    return raw.labels.map(l => (typeof l === 'string' ? l : l && l.name)).filter(Boolean);
+  }
+  return [];
+}
+
+function renderGiEditLabelPills() {
+  const box = $('#gi-edit-label-pills');
+  if (!box) return;
+  box.innerHTML = '';
+  const selected = new Set(giCurrentLabelNames());
+  const names = [...new Set([
+    ...state.trackerLabels.map(l => (typeof l === 'string' ? l : l.name)),
+    ...selected,
+  ])].filter(Boolean);
+  if (!names.length) {
+    box.innerHTML = '<small style="color:var(--text-muted);">Keine Labels im Tracker verfügbar.</small>';
+    return;
+  }
+  for (const name of names) {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'label-pill' + (selected.has(name) ? ' selected' : '');
+    pill.textContent = name;
+    pill.dataset.label = name;
+    pill.onclick = () => pill.classList.toggle('selected');
+    box.appendChild(pill);
+  }
+}
+
+function renderGiEditAssignees() {
+  const sel = $('#gi-edit-assignee-select');
+  if (!sel) return;
+  const raw = state.currentGitLabIssueRaw;
+  const currentId = raw && raw.assignee ? raw.assignee.id : null;
+  sel.innerHTML = '<option value="">Niemand zugewiesen</option>';
+  for (const u of state.trackerUsers) {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = u.name ? `${u.name} (@${u.username})` : `@${u.username}`;
+    if (currentId && Number(u.id) === Number(currentId)) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
 async function loadGitLabIssue(issue) {
   state.currentGitLabIssue = issue;
   // Live-Pull: aktuellen Stand vom Tracker holen (fällt serverseitig auf lokalen Stand zurück)
@@ -922,9 +997,10 @@ async function loadGitLabIssue(issue) {
   const stateBadge = $('#gi-state');
   stateBadge.textContent = issue.state === 'opened' ? 'offen' : 'geschlossen';
   stateBadge.className = `badge ${issue.state === 'opened' ? 'badge-active' : 'badge-done'}`;
-  $('#gi-close-btn').hidden = issue.state !== 'opened';
   $('#gi-reopen-btn').hidden = issue.state !== 'closed';
   $('#gi-web-link').href = issue.web_url || '#';
+  const tt = trackerType();
+  $('#gi-web-link').textContent = tt === 'github' ? 'In GitHub öffnen ↗' : tt === 'gitlab' ? 'In GitLab öffnen ↗' : 'Im Tracker öffnen ↗';
   $('#gi-field-grid').innerHTML = '<small style="color:var(--text-muted);">Lade Felder...</small>';
   $('#gi-label-pills').innerHTML = '';
   $('#gi-assignee-row').innerHTML = '';
@@ -934,10 +1010,13 @@ async function loadGitLabIssue(issue) {
   show('gitlab-issue-view');
   try {
     const { fields, raw } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}/fields`);
+    state.currentGitLabIssueRaw = raw;
     renderGitLabIssueMeta(fields, raw);
   } catch (err) {
+    state.currentGitLabIssueRaw = null;
     $('#gi-field-grid').innerHTML = `<small class="error">Felder konnten nicht geladen werden: ${err.message}</small>`;
   }
+  loadTrackerOptions();
   try {
     const { comments } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}/comments`);
     commentList.innerHTML = '';
@@ -1471,6 +1550,8 @@ bind('#gi-edit-btn', () => {
   const form = $('#gi-edit-form');
   form.title.value = issue.title || '';
   form.description.value = issue.description || '';
+  renderGiEditLabelPills();
+  renderGiEditAssignees();
   form.hidden = false;
 });
 bind('#gi-edit-cancel-btn', () => { $('#gi-edit-form').hidden = true; });
@@ -1480,14 +1561,21 @@ document.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const issue = state.currentGitLabIssue;
+    const selectedLabels = Array.from(document.querySelectorAll('#gi-edit-label-pills .label-pill.selected'))
+      .map(p => p.dataset.label);
+    const base = trackerType() === 'github' ? '/api/github' : '/api/gitlab';
+    const body = { title: fd.get('title'), description: fd.get('description'), labels: selectedLabels };
+    if (trackerType() === 'github') {
+      const assignee = fd.get('assignee_id');
+      body.assignees = assignee ? [state.trackerUsers.find(u => String(u.id) === String(assignee))?.username].filter(Boolean) : [];
+    } else {
+      body.assignee_id = fd.get('assignee_id') ? Number(fd.get('assignee_id')) : null;
+    }
+    body.auto_sync = state.currentProject && state.currentProject.auto_sync !== false;
     try {
-      const { issue: updated } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
+      const { issue: updated } = await api(`${base}/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
         method: 'PUT',
-        body: {
-          title: fd.get('title'),
-          description: fd.get('description'),
-          auto_sync: state.currentProject && state.currentProject.auto_sync !== false,
-        },
+        body,
       });
       $('#gi-edit-form').hidden = true;
       await loadGitLabIssue(updated);
@@ -1496,17 +1584,6 @@ document.addEventListener('submit', async (e) => {
       alert(err.message);
     }
   }
-});
-
-bind('#gi-close-btn', async () => {
-  const issue = state.currentGitLabIssue;
-  try {
-    await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
-      method: 'PUT', body: { state_event: 'close', auto_sync: state.currentProject && state.currentProject.auto_sync !== false },
-    });
-    await loadGitLabIssue({ ...issue, state: 'closed' });
-    await loadGitLabIssues(state.currentProject.id);
-  } catch (err) { alert(err.message); }
 });
 
 bind('#gi-reopen-btn', async () => {

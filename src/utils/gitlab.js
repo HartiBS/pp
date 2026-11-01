@@ -189,6 +189,10 @@ async function updateGitLabIssue(gitlabProjectId, iid, payload = {}, options = {
   if (description !== undefined) body.description = description;
   if (state_event) body.state_event = state_event;
   if (payload.labels !== undefined) body.labels = payload.labels;
+  if (payload.assignee_id !== undefined) {
+    if (payload.assignee_id) body.assignee_id = payload.assignee_id;
+    else body.assignee_ids = [];
+  }
   if (payload.due_date !== undefined) body.due_date = payload.due_date || null;
   if (payload.milestone_id !== undefined) body.milestone_id = payload.milestone_id || null;
   if (payload.time_estimate !== undefined) body.time_estimate = payload.time_estimate;
