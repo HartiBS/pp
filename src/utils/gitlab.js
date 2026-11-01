@@ -102,6 +102,7 @@ async function gitlabRequest(path, { method = 'GET', body, projectSettings } = {
 function mapGitLabIssue(issue) {
   return {
     gitlab_iid: issue.iid,
+    tracker_node_id: issue.node_id || (issue.id != null ? String(issue.id) : null),
     title: issue.title,
     description: issue.description || '',
     state: issue.state,
@@ -122,16 +123,17 @@ async function syncProjectIssues(projectId, gitlabProjectId, options = {}) {
   for (const issue of issues) {
     const mapped = mapGitLabIssue(issue);
     await db.query(
-      `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at, raw_data)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
+      `INSERT INTO gitlab_issues (project_id, gitlab_iid, tracker_node_id, title, description, state, web_url, synced_at, raw_data)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8)
        ON CONFLICT (project_id, gitlab_iid) DO UPDATE
-       SET title = EXCLUDED.title,
+       SET tracker_node_id = EXCLUDED.tracker_node_id,
+           title = EXCLUDED.title,
            description = EXCLUDED.description,
            state = EXCLUDED.state,
            web_url = EXCLUDED.web_url,
            raw_data = EXCLUDED.raw_data,
            synced_at = NOW()`,
-      [projectId, mapped.gitlab_iid, mapped.title, mapped.description, mapped.state, mapped.web_url, JSON.stringify(issue)]
+      [projectId, mapped.gitlab_iid, mapped.tracker_node_id, mapped.title, mapped.description, mapped.state, mapped.web_url, JSON.stringify(issue)]
     );
   }
 
@@ -155,6 +157,14 @@ async function syncProjectIssues(projectId, gitlabProjectId, options = {}) {
   }
 
   return rows;
+}
+
+async function getGitLabIssue(gitlabProjectId, iid, options = {}) {
+  const issue = await gitlabRequest(
+    `/projects/${encodeURIComponent(gitlabProjectId)}/issues/${iid}`,
+    { projectSettings: options.projectSettings }
+  );
+  return { ...mapGitLabIssue(issue), raw_issue: issue };
 }
 
 async function createGitLabIssue(gitlabProjectId, payload = {}, options = {}) {
@@ -327,6 +337,7 @@ module.exports = {
   getSettings,
   saveSettings,
   gitlabRequest,
+  getGitLabIssue,
   syncProjectIssues,
   syncProjectMilestones,
   createGitLabIssue,

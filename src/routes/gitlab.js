@@ -87,6 +87,54 @@ router.get('/projects/:id/issues', loadProjectRole, requireProjectPermission('vi
   }
 });
 
+// Einzelnes Issue: holt den aktuellen Stand live aus GitLab (Pull beim Laden
+// der Detailansicht), aktualisiert den lokalen Datensatz inkl. node_id und
+// liefert ihn zurueck. Fällt bei Tracker-Fehlern auf den lokalen Stand zurück.
+router.get('/projects/:id/issues/:iid', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const project = await db.query(
+      'SELECT gitlab_project_id FROM projects WHERE id = $1',
+      [req.params.id]
+    );
+    if (!project.rows.length || !project.rows[0].gitlab_project_id) {
+      return res.status(400).json({ error: 'Kein GitLab-Projekt mit diesem Projekt verknüpft' });
+    }
+    let issue = null;
+    try {
+      const live = await gitlab.getGitLabIssue(project.rows[0].gitlab_project_id, req.params.iid);
+      const { rows } = await db.query(
+        `INSERT INTO gitlab_issues (project_id, gitlab_iid, tracker_node_id, title, description, state, web_url, synced_at, raw_data)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8)
+         ON CONFLICT (project_id, gitlab_iid) DO UPDATE
+         SET tracker_node_id = EXCLUDED.tracker_node_id,
+             title = EXCLUDED.title,
+             description = EXCLUDED.description,
+             state = EXCLUDED.state,
+             web_url = EXCLUDED.web_url,
+             raw_data = EXCLUDED.raw_data,
+             synced_at = NOW()
+         RETURNING *`,
+        [req.params.id, live.gitlab_iid, live.tracker_node_id, live.title, live.description, live.state, live.web_url, JSON.stringify(live.raw_issue || live)]
+      );
+      issue = rows[0];
+    } catch (liveErr) {
+      console.warn('Live-Pull des GitLab-Issues fehlgeschlagen, lokaler Stand wird geliefert:', liveErr.message);
+      const local = await db.query(
+        'SELECT * FROM gitlab_issues WHERE project_id = $1 AND gitlab_iid = $2',
+        [req.params.id, req.params.iid]
+      );
+      if (!local.rows.length) {
+        return res.status(404).json({ error: 'Issue nicht gefunden' });
+      }
+      issue = local.rows[0];
+    }
+    res.json({ issue });
+  } catch (err) {
+    console.error(err);
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
 router.post('/projects/:id/issues', loadProjectRole, requireProjectPermission('create_task'), async (req, res) => {
   const { title, description } = req.body;
   if (!title) {
@@ -114,34 +162,44 @@ router.post('/projects/:id/issues', loadProjectRole, requireProjectPermission('c
 });
 
 router.put('/projects/:id/issues/:iid', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
-  const { title, description, state_event } = req.body;
+  const { title, description, state_event, auto_sync } = req.body;
   if (state_event && !['close', 'reopen'].includes(state_event)) {
     return res.status(400).json({ error: "state_event muss 'close' oder 'reopen' sein" });
   }
   try {
     const project = await db.query(
-      'SELECT gitlab_project_id FROM projects WHERE id = $1',
+      'SELECT gitlab_project_id, auto_sync FROM projects WHERE id = $1',
       [req.params.id]
     );
     if (!project.rows.length || !project.rows[0].gitlab_project_id) {
       return res.status(400).json({ error: 'Kein GitLab-Projekt mit diesem Projekt verknüpft' });
     }
+    // Push zum Tracker nur bei aktivem Auto-Sync (Request-Override oder Projekt-Default)
+    const pushToTracker = auto_sync !== undefined && auto_sync !== null
+      ? auto_sync === true
+      : project.rows[0].auto_sync !== false;
     const existing = await db.query(
-      'SELECT gitlab_iid FROM gitlab_issues WHERE project_id = $1 AND gitlab_iid = $2',
+      'SELECT gitlab_iid, title, description, state FROM gitlab_issues WHERE project_id = $1 AND gitlab_iid = $2',
       [req.params.id, req.params.iid]
     );
     if (!existing.rows.length) {
       return res.status(404).json({ error: 'Issue nicht gefunden' });
     }
-    const prevState = await db.query(
-      'SELECT state FROM gitlab_issues WHERE project_id = $1 AND gitlab_iid = $2',
-      [req.params.id, req.params.iid]
-    );
-    const oldState = prevState.rows[0] ? prevState.rows[0].state : null;
+    const oldState = existing.rows[0].state;
 
-    const updated = await gitlab.updateGitLabIssue(project.rows[0].gitlab_project_id, req.params.iid, {
-      title, description, state_event,
-    });
+    let updated;
+    if (pushToTracker) {
+      updated = await gitlab.updateGitLabIssue(project.rows[0].gitlab_project_id, req.params.iid, {
+        title, description, state_event,
+      });
+    } else {
+      updated = {
+        gitlab_iid: Number(req.params.iid),
+        title: title !== undefined ? title : existing.rows[0].title,
+        description: description !== undefined ? description : existing.rows[0].description,
+        state: state_event === 'close' ? 'closed' : state_event === 'reopen' ? 'opened' : oldState,
+      };
+    }
 
     if (state_event && oldState && oldState !== updated.state) {
       const members = await db.query(
@@ -166,7 +224,7 @@ router.put('/projects/:id/issues/:iid', loadProjectRole, requireProjectPermissio
        WHERE project_id = $4 AND gitlab_iid = $5 RETURNING *`,
       [updated.title, updated.description, updated.state, req.params.id, req.params.iid]
     );
-    res.json({ issue: rows[0] });
+    res.json({ issue: rows[0], pushed: pushToTracker });
   } catch (err) {
     console.error(err);
     res.status(err.status || 500).json({ error: err.message });

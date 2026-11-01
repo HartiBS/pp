@@ -907,6 +907,14 @@ function renderGitLabIssueMeta(fields, raw) {
 
 async function loadGitLabIssue(issue) {
   state.currentGitLabIssue = issue;
+  // Live-Pull: aktuellen Stand vom Tracker holen (fällt serverseitig auf lokalen Stand zurück)
+  try {
+    const { issue: live } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`);
+    if (live) issue = live;
+  } catch (err) {
+    console.warn('Live-Pull fehlgeschlagen, lokaler Stand wird angezeigt:', err.message);
+  }
+  state.currentGitLabIssue = issue;
   $('#gi-edit-form').hidden = true;
   $('#gi-title').textContent = `#${issue.gitlab_iid} ${issue.title}`;
   $('#gi-description').textContent = issue.description || '(keine Beschreibung)';
@@ -1475,7 +1483,11 @@ document.addEventListener('submit', async (e) => {
     try {
       const { issue: updated } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
         method: 'PUT',
-        body: { title: fd.get('title'), description: fd.get('description') },
+        body: {
+          title: fd.get('title'),
+          description: fd.get('description'),
+          auto_sync: state.currentProject && state.currentProject.auto_sync !== false,
+        },
       });
       $('#gi-edit-form').hidden = true;
       await loadGitLabIssue(updated);
@@ -1490,7 +1502,7 @@ bind('#gi-close-btn', async () => {
   const issue = state.currentGitLabIssue;
   try {
     await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
-      method: 'PUT', body: { state_event: 'close' },
+      method: 'PUT', body: { state_event: 'close', auto_sync: state.currentProject && state.currentProject.auto_sync !== false },
     });
     await loadGitLabIssue({ ...issue, state: 'closed' });
     await loadGitLabIssues(state.currentProject.id);
@@ -1501,7 +1513,7 @@ bind('#gi-reopen-btn', async () => {
   const issue = state.currentGitLabIssue;
   try {
     await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
-      method: 'PUT', body: { state_event: 'reopen' },
+      method: 'PUT', body: { state_event: 'reopen', auto_sync: state.currentProject && state.currentProject.auto_sync !== false },
     });
     await loadGitLabIssue({ ...issue, state: 'opened' });
     await loadGitLabIssues(state.currentProject.id);
