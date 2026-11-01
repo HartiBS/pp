@@ -1,0 +1,31 @@
+{
+  "projects": [
+    {
+      "id": "123",
+      "name": "asdf",
+      "description": "asd",
+      "items": []
+    },
+    {
+      "id": "00000_01",
+      "name": "Agile Projects",
+      "description": "Test für Projektabwicklung",
+      "items": [
+        {
+          "id": "a-001",
+          "project_id": "00000_01",
+          "title": "Entwicklungsumgebung vorbereiten",
+          "status": "pruefung",
+          "priority": "mittel"
+        },
+        {
+          "id": "a-002",
+          "project_id": "00000_01",
+          "title": "Entwicklungsumgebung einrichten",
+          "status": "in_arbeit",
+          "priority": "mittel"
+        }
+      ]
+    }
+  ]
+}

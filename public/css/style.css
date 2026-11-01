@@ -385,6 +385,11 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   border-radius: 10px;
 }
 
+#task-form button[type="submit"] {
+  flex-basis: 100%;
+  align-self: flex-start;
+  width: auto;
+}
 #task-form input { flex: 1; min-width: 140px; }
 #task-form select { flex: 0 1 auto; min-width: 130px; width: auto; }
 
