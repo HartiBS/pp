@@ -101,6 +101,7 @@ async function githubRequest(path, { method = 'GET', body, projectSettings } = {
 function mapGitHubIssue(issue) {
   return {
     gitlab_iid: issue.number, // kompatibel: number statt iid
+    tracker_node_id: issue.node_id || (issue.id != null ? String(issue.id) : null),
     github_number: issue.number,
     title: issue.title,
     description: issue.body || '',
@@ -125,16 +126,17 @@ async function syncProjectIssues(projectId, repo, options = {}) {
   for (const issue of pureIssues) {
     const mapped = mapGitHubIssue(issue);
     await db.query(
-      `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at, raw_data)
+      `INSERT INTO gitlab_issues (project_id, gitlab_iid, tracker_node_id, title, description, state, web_url, synced_at, raw_data)
        VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
        ON CONFLICT (project_id, gitlab_iid) DO UPDATE
-       SET title = EXCLUDED.title,
+       SET tracker_node_id = EXCLUDED.tracker_node_id,
+           title = EXCLUDED.title,
            description = EXCLUDED.description,
            state = EXCLUDED.state,
            web_url = EXCLUDED.web_url,
            raw_data = EXCLUDED.raw_data,
            synced_at = NOW()`,
-      [projectId, mapped.gitlab_iid, mapped.title, mapped.description, mapped.state, mapped.web_url, JSON.stringify(issue)]
+      [projectId, mapped.gitlab_iid, mapped.tracker_node_id, mapped.title, mapped.description, mapped.state, mapped.web_url, JSON.stringify(issue)]
     );
   }
 
@@ -155,6 +157,14 @@ async function syncProjectIssues(projectId, repo, options = {}) {
     await issueTracker.applyPullToTask(projectId, 'github', issue);
   }
   return rows;
+}
+
+async function getGitHubIssue(repo, number, options = {}) {
+  const issue = await githubRequest(
+    `/repos/${encodeRepo(repo)}/issues/${number}`,
+    { projectSettings: options.projectSettings }
+  );
+  return { ...mapGitHubIssue(issue), raw_issue: issue };
 }
 
 async function createGitHubIssue(repo, payload = {}, options = {}) {
@@ -288,6 +298,7 @@ module.exports = {
   getSettings,
   saveSettings,
   githubRequest,
+  getGitHubIssue,
   syncProjectIssues,
   createGitHubIssue,
   updateGitHubIssue,
