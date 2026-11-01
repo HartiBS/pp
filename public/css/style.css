@@ -377,13 +377,20 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
 #task-form {
   flex-direction: row;
+  flex-wrap: wrap;
   gap: 0.6rem;
-  background: transparent;
-  border: none;
-  padding: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 1rem 1.2rem;
+  border-radius: 10px;
 }
 
-#task-form input { flex: 1; }
+#task-form input { flex: 1; min-width: 140px; }
+#task-form select { flex: 0 1 auto; min-width: 130px; width: auto; }
+
+.list-section-title {
+  margin-bottom: 0.5rem;
+}
 
 /* ===== BADGES ===== */
 .badge {
