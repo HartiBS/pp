@@ -189,7 +189,7 @@ function populateAssigneeSelect(members, project, readonly) {
   const select = $('#task-assignee-select');
   if (!select) return;
   const current = select.value;
-  select.innerHTML = '<option value="">Mir zuweisen</option>';
+  select.innerHTML = '<option value="">Zuständig: ich</option>';
   const people = [{ id: state.user.id, name: state.user.name + ' (ich)' }];
   if (project && project.owner_id !== state.user.id) {
     people.push({ id: project.owner_id, name: (project.owner_name || 'Owner') + ' (Owner)' });
@@ -2063,11 +2063,12 @@ function enhanceTaskForm() {
   if (typeSelect) {
     const priorityLabel = document.createElement('select');
     priorityLabel.name = 'priority';
+    priorityLabel.title = 'Priorität des Tasks';
     priorityLabel.innerHTML = `
-      <option value="normal">Normal</option>
-      <option value="low">Niedrig</option>
-      <option value="high">Hoch</option>
-      <option value="critical">Kritisch</option>
+      <option value="normal">Priorität: Normal</option>
+      <option value="low">Priorität: Niedrig</option>
+      <option value="high">Priorität: Hoch</option>
+      <option value="critical">Priorität: Kritisch</option>
     `;
     typeSelect.parentNode.insertBefore(priorityLabel, typeSelect.nextSibling);
   }
