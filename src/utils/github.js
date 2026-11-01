@@ -128,7 +128,7 @@ async function syncProjectIssues(projectId, repo, options = {}) {
     const mapped = mapGitHubIssue(issue);
     await db.query(
       `INSERT INTO gitlab_issues (project_id, gitlab_iid, tracker_node_id, title, description, state, web_url, synced_at, raw_data)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8)
        ON CONFLICT (project_id, gitlab_iid) DO UPDATE
        SET tracker_node_id = EXCLUDED.tracker_node_id,
            title = EXCLUDED.title,

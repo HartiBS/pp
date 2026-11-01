@@ -574,7 +574,6 @@
             <span class="section-label">Zusatzfelder</span>
             <div id="gi-custom-fields" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
             <hr class="separator">
-            <button id="gi-close-btn" class="btn-block">Schließen</button>
             <button id="gi-reopen-btn" class="btn-secondary btn-block" hidden>Wiedereröffnen</button>
             <button id="gi-edit-btn" class="btn-secondary btn-block">Bearbeiten</button>
             <a id="gi-web-link" href="#" target="_blank" rel="noopener" style="text-align:center; font-size:0.875rem;">In GitLab öffnen ↗</a>
@@ -584,8 +583,16 @@
       <form id="gi-edit-form" hidden style="margin-top:1rem;">
         <label>Titel <input type="text" name="title" required></label>
         <label>Beschreibung <textarea name="description"></textarea></label>
+        <div class="field">
+          <label>Labels</label>
+          <div id="gi-edit-label-pills" class="label-pill-row"></div>
+          <small style="color:var(--text-muted);">Verfügbare Labels des Trackers – anklicken zum Zu- bzw. Abwählen.</small>
+        </div>
+        <label>Bearbeiter
+          <select name="assignee_id" id="gi-edit-assignee-select"></select>
+        </label>
         <div style="display:flex; gap:0.75rem;">
-          <button type="submit">In GitLab speichern</button>
+          <button type="submit">Im Tracker speichern</button>
           <button type="button" id="gi-edit-cancel-btn" class="btn-secondary">Abbrechen</button>
         </div>
       </form>
@@ -749,12 +756,259 @@
         <ul id="td-watcher-list" class="dash-list"></ul>
       </div>
     </section>
+
+    <section id="styleguide-view" hidden>
+      <button id="styleguide-back-btn">&#8592; Zur&uuml;ck</button>
+      <h2>Styleguide</h2>
+      <h3>Interaktive Vorschau aller UI-Komponenten und Design-Tokens</h3>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-header"><span class="card-title">Design-Tokens &amp; &auml;nderbare Felder</span></div>
+        <div class="card-content">
+          <p style="color:var(--text-muted); font-size:0.875rem;">
+            Alle Farben als Token aus <code>:root</code> (aktiver Theme-Modus). Akzent- und danger-Farben
+            sowie Radius, Button-Padding und Grundschriftgr&ouml;&szlig;e sind live &auml;nderbar.
+          </p>
+          <div id="sg-swatches" class="sg-swatches"></div>
+          <hr class="separator">
+          <span class="section-label">Farben &auml;ndern (live auf :root)</span>
+          <div class="sg-controls">
+            <div class="field">
+              <label for="sg-token-accent">--accent</label>
+              <input type="color" id="sg-token-accent">
+            </div>
+            <div class="field">
+              <label for="sg-token-accent-hover">--accent-hover</label>
+              <input type="color" id="sg-token-accent-hover">
+            </div>
+            <div class="field">
+              <label for="sg-token-danger">--danger</label>
+              <input type="color" id="sg-token-danger">
+            </div>
+            <div class="field">
+              <label for="sg-radius">border-radius (px)</label>
+              <input type="number" id="sg-radius" min="0" max="24" step="1">
+            </div>
+            <div class="field">
+              <label for="sg-btn-padding">Button-Padding (rem)</label>
+              <input type="number" id="sg-btn-padding" min="0" max="3" step="0.1">
+            </div>
+            <div class="field">
+              <label for="sg-font-size">Grundschriftgr&ouml;&szlig;e (px)</label>
+              <input type="number" id="sg-font-size" min="10" max="24" step="1">
+            </div>
+          </div>
+          <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
+            <button type="button" id="sg-reset-tokens" class="btn-secondary">Zur&uuml;cksetzen</button>
+            <button type="button" id="sg-copy-css" class="btn-secondary">CSS kopieren</button>
+            <span id="sg-copy-msg" class="msg-success" hidden>Kopiert!</span>
+          </div>
+          <pre id="sg-token-output" class="sg-code"></pre>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-header"><span class="card-title">Buttons</span></div>
+        <div class="card-content">
+          <div class="sg-row">
+            <button type="button">Prim&auml;r</button>
+            <button type="button" class="btn-secondary">Sekund&auml;r</button>
+            <button type="button" class="btn-small">Klein</button>
+            <button type="button" class="btn-block" style="max-width:220px;">Volle Breite (btn-block)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-header"><span class="card-title">Formular</span></div>
+        <div class="card-content">
+          <form id="sg-form-demo">
+            <div class="form-grid">
+              <div class="field">
+                <label for="sg-in-text">Textfeld</label>
+                <input type="text" id="sg-in-text" placeholder="Beispieltext">
+              </div>
+              <div class="field">
+                <label for="sg-in-select">Select</label>
+                <select id="sg-in-select"><option>Option A</option><option>Option B</option></select>
+              </div>
+            </div>
+            <div class="field">
+              <label for="sg-in-area">Textarea</label>
+              <textarea id="sg-in-area" rows="3" placeholder="Mehrzeilig &hellip;"></textarea>
+            </div>
+            <div>
+              <button type="submit">Absenden</button>
+            </div>
+          </form>
+          <p class="error">Fehlermeldung (.error)</p>
+          <p class="msg-success">Erfolgsmeldung (.msg-success)</p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-header"><span class="card-title">Badges</span></div>
+        <div class="card-content">
+          <span class="section-label">Status</span>
+          <div class="sg-row">
+            <span class="badge badge-todo">Todo</span>
+            <span class="badge badge-in_progress">In Arbeit</span>
+            <span class="badge badge-review">Review</span>
+            <span class="badge badge-done">Erledigt</span>
+            <span class="badge badge-active">Aktiv</span>
+            <span class="badge badge-planning">Planung</span>
+          </div>
+          <hr class="separator">
+          <span class="section-label">Priorit&auml;t</span>
+          <div class="sg-row">
+            <span class="badge badge-priority-low">Niedrig</span>
+            <span class="badge badge-priority-normal">Mittel</span>
+            <span class="badge badge-priority-high">Hoch</span>
+            <span class="badge badge-priority-critical">Kritisch</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-header"><span class="card-title">Tabs, KPIs &amp; Liste</span></div>
+        <div class="card-content">
+          <div class="view-tabs" id="sg-tabs" style="margin-bottom:1rem;">
+            <button class="view-tab active" type="button">Tab 1</button>
+            <button class="view-tab" type="button">Tab 2</button>
+            <button class="view-tab" type="button">Tab 3</button>
+          </div>
+          <div class="kpi-grid" style="margin-bottom:1rem;">
+            <div class="kpi-card"><span class="kpi-value">12</span><span class="kpi-label">Offen</span></div>
+            <div class="kpi-card"><span class="kpi-value">4</span><span class="kpi-label">In Arbeit</span></div>
+            <div class="kpi-card"><span class="kpi-value">27</span><span class="kpi-label">Erledigt</span></div>
+          </div>
+          <ul class="dash-list">
+            <li><span>Listeneintrag mit <small>Zusatztext</small></span><span class="badge badge-done">Erledigt</span></li>
+            <li><span>Weiterer Eintrag</span><span class="dash-bar"><div style="width:60%;"></div></span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-header"><span class="card-title">Kanban-Board</span></div>
+        <div class="card-content">
+          <div class="board">
+            <div class="board-col">
+              <h4>Todo <span class="board-count">1</span></h4>
+              <div class="board-cards">
+                <div class="board-card"><span class="badge badge-priority-high">Hoch</span> Demo-Karte<small>Projekt A</small></div>
+              </div>
+            </div>
+            <div class="board-col">
+              <h4>In Arbeit <span class="board-count">1</span></h4>
+              <div class="board-cards">
+                <div class="board-card"><span class="badge badge-priority-normal">Mittel</span> Demo-Karte<small>Projekt B</small></div>
+              </div>
+            </div>
+            <div class="board-col">
+              <h4>Review <span class="board-count">0</span></h4>
+              <div class="board-cards"></div>
+            </div>
+            <div class="board-col">
+              <h4>Erledigt <span class="board-count">1</span></h4>
+              <div class="board-cards">
+                <div class="board-card"><span class="badge badge-done">Erledigt</span> Demo-Karte<small>Projekt A</small></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-header"><span class="card-title">Tabelle</span></div>
+        <div class="card-content">
+          <table class="matrix-table">
+            <thead>
+              <tr><th>Feld</th><th>Aktiv</th><th>Pflicht</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Titel</td><td><input type="checkbox" checked></td><td><input type="checkbox" checked disabled></td></tr>
+              <tr><td>Beschreibung</td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+              <tr><td>Priorit&auml;t</td><td><input type="checkbox"></td><td><input type="checkbox" disabled></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div class="card-header"><span class="card-title">Issue-Muster (Card-Grid, 2-Spalten-Layout)</span></div>
+        <div class="card-content">
+          <div class="card-grid">
+            <div class="card card-span-2">
+              <div class="card-header"><span class="card-title">Details</span></div>
+              <div class="card-content">
+                <div class="form-grid">
+                  <div class="field">
+                    <label for="sg-issue-title">Titel</label>
+                    <input type="text" id="sg-issue-title" value="Demo-Issue: Login-Timeout beheben">
+                  </div>
+                  <div class="field">
+                    <label for="sg-issue-type">Typ</label>
+                    <select id="sg-issue-type"><option>Bug</option><option>Feature</option><option>Task</option></select>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="sg-issue-desc">Beschreibung</label>
+                  <textarea id="sg-issue-desc" rows="3">Beispieltext f&uuml;r die Issue-Beschreibung &hellip;</textarea>
+                </div>
+                <hr class="separator">
+                <span class="section-label">Labels (klicken zum Umschalten)</span>
+                <div class="sg-row">
+                  <button type="button" class="label-pill selected">bug</button>
+                  <button type="button" class="label-pill">ui</button>
+                  <button type="button" class="label-pill">backend</button>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header"><span class="card-title">Metadaten</span></div>
+              <div class="card-content">
+                <div class="form-grid">
+                  <div class="field">
+                    <label>Status</label>
+                    <span class="badge badge-in_progress">In Arbeit</span>
+                  </div>
+                  <div class="field">
+                    <label>Priorit&auml;t</label>
+                    <span class="badge badge-priority-high">Hoch</span>
+                  </div>
+                </div>
+                <span class="section-label">Bearbeiter</span>
+                <div class="assignee-row"><span class="avatar">MM</span> Max Mustermann</div>
+                <button type="button" class="btn-block">Issue erstellen</button>
+              </div>
+            </div>
+          </div>
+          <hr class="separator">
+          <span class="section-label">Issue-Karte (Liste)</span>
+          <div class="issue-card">
+            <div class="issue-card-head">
+              <div>
+                <span class="issue-title">Login-Timeout beheben</span>
+                <span class="issue-number">#42</span>
+                <div class="issue-badges">
+                  <span class="badge badge-priority-high">Hoch</span>
+                  <span class="label-pill selected" style="cursor:default;">bug</span>
+                </div>
+              </div>
+              <div class="assignee-row"><span class="badge badge-in_progress">In Arbeit</span><span class="avatar">MM</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer class="app-footer">
-    <span>PP Projektverwaltung <span id="app-version"></span></span>
+    <span>PP Projektverwaltung <span id="app-version"></span> &middot; <a href="#" id="styleguide-link">Styleguide</a></span>
   </footer>
 
   <script src="/js/app.js?v=20"></script>
+  <script src="/js/styleguide.js?v=1"></script>
 </body>
 </html>
