@@ -171,14 +171,18 @@ function taskToMarkdown(task, { customFieldDefs = [], subtasks = [], parent = nu
 }
 
 /**
- * Parst eine Markdown-Beschreibung (von GitLab) zurück in Task-Felder.
+ * Parst eine Markdown-Beschreibung (von GitLab/GitHub) zurück in Task-Felder.
  *
  * @param {string} markdown - Die Markdown-Beschreibung
- * @returns {{ meta: object|null, description: string }} Extrahierte Felder
+ * @param {object} [opts]
+ * @param {Array}  [opts.customFieldDefs] - Aktive Custom-Field-Definitionen des Projekts.
+ *   Wird die menschenlesbare "## Zusatzfelder"-Tabelle gefunden, werden die Werte
+ *   anhand der Definitionen (Name + Typ) zurück in custom_fields übernommen.
+ * @returns {{ meta: object|null, description: string, customFields: object }}
  */
-function markdownToTaskFields(markdown) {
+function markdownToTaskFields(markdown, { customFieldDefs = [] } = {}) {
   if (!markdown || typeof markdown !== 'string') {
-    return { meta: null, description: '' };
+    return { meta: null, description: '', customFields: {} };
   }
 
   // Metadaten-Block extrahieren
@@ -207,7 +211,82 @@ function markdownToTaskFields(markdown) {
   }
 
   // Wenn kein Meta-Block gefunden: Beschreibung 1:1 (Abwärtskompatibilität)
-  return { meta, description: description || '' };
+  const customFields = parseCustomFieldsSection(description, customFieldDefs);
+  if (Object.keys(customFields).length > 0) {
+    description = stripCustomFieldsSection(description);
+  }
+  return { meta, description: description || '', customFields };
+}
+
+/**
+ * Parst den menschenlesbaren "## Zusatzfelder"-Markdown-Block (Tabelle
+ * | Feld | Wert |) zurück in custom_fields-Werte anhand der Definitionen.
+ */
+function parseCustomFieldsSection(markdown, customFieldDefs) {
+  const result = {};
+  if (!customFieldDefs || !customFieldDefs.length) return result;
+  const sectionRe = /^##\s+Zusatzfelder\s*$/im;
+  const match = sectionRe.exec(markdown);
+  if (!match) return result;
+  const rest = markdown.slice(match.index + match[0].length);
+  const tableRe = /\|\s*Feld\s*\|\s*Wert\s*\|/i;
+  const tableMatch = tableRe.exec(rest);
+  if (!tableMatch) return result;
+  const tableLines = rest.slice(tableMatch.index).split('\n');
+  for (const line of tableLines) {
+    const rowMatch = /^\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*$/.exec(line.trim());
+    if (!rowMatch) {
+      if (line.trim() === '' || /^\|[-\s|]+\|$/.test(line.trim())) continue;
+      break;
+    }
+    const name = unescapeMd(rowMatch[1].trim());
+    const rawValue = unescapeMd(rowMatch[2].trim());
+    if (!name || rawValue === '') continue;
+    const def = customFieldDefs.find(d => d.name === name);
+    if (!def) continue;
+    const value = coerceCustomFieldValue(def, rawValue);
+    if (value !== null) result[String(def.id)] = value;
+  }
+  return result;
+}
+
+/**
+ * Entfernt den "## Zusatzfelder"-Block inkl. Tabelle aus der Beschreibung.
+ */
+function stripCustomFieldsSection(markdown) {
+  const lines = String(markdown).split('\n');
+  const out = [];
+  let skipping = false;
+  for (const line of lines) {
+    if (/^##\s+Zusatzfelder\s*$/i.test(line.trim())) {
+      skipping = true;
+      continue;
+    }
+    if (skipping && /^##\s/.test(line.trim())) skipping = false;
+    if (!skipping) out.push(line);
+  }
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function unescapeMd(str) {
+  return str.replace(/\\\|/g, '|').replace(/\\\\/g, '\\');
+}
+
+function coerceCustomFieldValue(def, raw) {
+  switch (def.field_type) {
+    case 'number': {
+      const n = Number(raw.replace(',', '.'));
+      return isNaN(n) ? null : n;
+    }
+    case 'checkbox':
+      return raw === '✅ Ja' || raw === 'true' || raw === '1' || raw === 'Ja';
+    case 'date':
+      return isNaN(Date.parse(raw)) ? null : raw;
+    case 'dropdown':
+      return (def.options || []).includes(raw) ? raw : null;
+    default:
+      return raw;
+  }
 }
 
 /**
@@ -222,9 +301,46 @@ function escapeMd(str) {
     .replace(/\r?\n/g, ' ');   // Zeilenumbrüche entfernen
 }
 
+/**
+ * Bettet Custom-Field-Werte in eine bestehende Markdown-Beschreibung ein
+ * (z. B. GitHub-Issue-Body): aktualisiert den pp-meta-JSON-Block und schreibt
+ * die menschenlesbare "## Zusatzfelder"-Tabelle neu bzw. legt sie an.
+ * @returns {string} aktualisierter Markdown-String
+ */
+function mergeCustomFieldsIntoMarkdown(markdown, customFieldDefs, values) {
+  const body = typeof markdown === 'string' ? markdown : '';
+  const parsed = markdownToTaskFields(body, { customFieldDefs });
+  const merged = { ...(parsed.customFields || {}), ...(parsed.meta && parsed.meta.custom_fields ? parsed.meta.custom_fields : {}), ...(values || {}) };
+  let out = parsed.description || '';
+
+  // pp-meta-Block aktualisieren (an erster Stelle neu einfuegen, falls vorhanden)
+  if (parsed.meta) {
+    parsed.meta.custom_fields = merged;
+    out = `${META_START}${JSON.stringify(parsed.meta)}${META_END}\n\n${out}`.trim() + '\n';
+  }
+
+  // Menschenlesbare Tabelle neu schreiben
+  const defsWithValues = (customFieldDefs || []).filter(d => merged[String(d.id)] !== undefined && merged[String(d.id)] !== null);
+  if (defsWithValues.length > 0) {
+    const lines = ['', '## Zusatzfelder', '', '| Feld | Wert |', '|------|------|'];
+    for (const def of customFieldDefs) {
+      const value = merged[String(def.id)];
+      if (value === undefined || value === null) continue;
+      const displayValue = def.field_type === 'checkbox'
+        ? (value ? '\u2705 Ja' : '\u274c Nein')
+        : String(value);
+      lines.push(`| ${escapeMd(def.name)} | ${escapeMd(displayValue)} |`);
+    }
+    out = stripCustomFieldsSection(out).trim() + '\n\n' + lines.join('\n') + '\n';
+  }
+  return out.trim() + '\n';
+}
+
 module.exports = {
   taskToMarkdown,
   markdownToTaskFields,
+  parseCustomFieldsSection,
+  mergeCustomFieldsIntoMarkdown,
   escapeMd,
   META_START,
   META_END,

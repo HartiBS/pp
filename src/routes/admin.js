@@ -218,7 +218,7 @@ router.put('/permissions-matrix/:role', async (req, res) => {
 
 router.get('/custom-fields', async (req, res) => {
   try {
-    const definitions = await customFields.getAllDefinitions();
+    const definitions = await customFields.getAllDefinitionsWithUsage();
     res.json({ definitions });
   } catch (err) {
     console.error(err);
@@ -270,14 +270,88 @@ router.put('/custom-fields/:id', async (req, res) => {
 
 router.delete('/custom-fields/:id', async (req, res) => {
   try {
-    const deleted = await customFields.deleteDefinition(req.params.id);
-    if (!deleted) {
+    const result = await customFields.deleteDefinition(req.params.id);
+    if (!result.ok) {
+      return res.status(409).json({ error: result.error });
+    }
+    if (!result.deleted) {
       return res.status(404).json({ error: 'Custom Field nicht gefunden' });
     }
     res.json({ ok: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// Matrix: Projekte (Zeilen) x Custom-Field-Definitionen (Spalten) mit Aktiv-Status
+router.get('/custom-fields/matrix', async (req, res) => {
+  try {
+    const { rows: projects } = await db.query(
+      `SELECT p.id, p.name FROM projects p ORDER BY p.name ASC`
+    );
+    const definitions = await customFields.getAllDefinitions();
+    const { rows: links } = await db.query(
+      'SELECT project_id, field_definition_id, is_enabled FROM project_custom_fields'
+    );
+    res.json({
+      projects,
+      definitions,
+      matrix: links.map(l => ({
+        project_id: l.project_id,
+        field_definition_id: l.field_definition_id,
+        is_enabled: l.is_enabled,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  }
+});
+
+// Matrix speichern: { matrix: [{ project_id, field_definition_id, is_enabled }] }
+router.put('/custom-fields/matrix', async (req, res) => {
+  const { matrix } = req.body;
+  if (!Array.isArray(matrix)) {
+    return res.status(400).json({ error: 'matrix muss ein Array sein' });
+  }
+  for (const entry of matrix) {
+    if (!Number.isInteger(Number(entry.project_id)) || !Number.isInteger(Number(entry.field_definition_id))) {
+      return res.status(400).json({ error: 'Ungültiger Matrix-Eintrag' });
+    }
+    if (typeof entry.is_enabled !== 'boolean') {
+      return res.status(400).json({ error: 'is_enabled muss ein Boolean sein' });
+    }
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const entry of matrix) {
+      const projectId = Number(entry.project_id);
+      const fieldId = Number(entry.field_definition_id);
+      if (entry.is_enabled) {
+        await client.query(
+          `INSERT INTO project_custom_fields (project_id, field_definition_id, is_enabled)
+           VALUES ($1, $2, TRUE)
+           ON CONFLICT (project_id, field_definition_id)
+           DO UPDATE SET is_enabled = TRUE`,
+          [projectId, fieldId]
+        );
+      } else {
+        await client.query(
+          'DELETE FROM project_custom_fields WHERE project_id = $1 AND field_definition_id = $2',
+          [projectId, fieldId]
+        );
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Serverfehler' });
+  } finally {
+    client.release();
   }
 });
 

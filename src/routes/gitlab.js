@@ -6,6 +6,8 @@ const gitlab = require('../utils/gitlab');
 const notifications = require('../utils/notifications');
 const trackerFieldMapping = require('../utils/trackerFieldMapping');
 const customFields = require('../utils/customFields');
+const taskMarkdown = require('../utils/taskMarkdown');
+const issueTracker = require('../utils/issueTracker');
 
 const router = express.Router();
 
@@ -162,7 +164,10 @@ router.post('/projects/:id/issues', loadProjectRole, requireProjectPermission('c
 });
 
 router.put('/projects/:id/issues/:iid', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
-  const { title, description, state_event, labels, assignee_id, auto_sync } = req.body;
+  const { title, description, state_event, labels, assignee_id, auto_sync, custom_fields } = req.body;
+  if (custom_fields !== undefined && (typeof custom_fields !== 'object' || custom_fields === null || Array.isArray(custom_fields))) {
+    return res.status(400).json({ error: 'custom_fields muss ein Objekt sein' });
+  }
   if (state_event && !['close', 'reopen'].includes(state_event)) {
     return res.status(400).json({ error: "state_event muss 'close' oder 'reopen' sein" });
   }
@@ -190,16 +195,26 @@ router.put('/projects/:id/issues/:iid', loadProjectRole, requireProjectPermissio
     }
     const oldState = existing.rows[0].state;
 
+    // Custom Fields: Werte in den Markdown-Body einbetten (Issue-Body bleibt bearbeitbar)
+    let effectiveDescription = description;
+    if (custom_fields !== undefined) {
+      const cfResult = await issueTracker.applyCustomFieldsToIssue(req.params.id, existing.rows[0], custom_fields);
+      if (!cfResult.ok) {
+        return res.status(400).json({ error: cfResult.error });
+      }
+      effectiveDescription = cfResult.description;
+    }
+
     let updated;
     if (pushToTracker) {
       updated = await gitlab.updateGitLabIssue(project.rows[0].gitlab_project_id, req.params.iid, {
-        title, description, state_event, labels, assignee_id,
+        title, description: effectiveDescription !== undefined ? effectiveDescription : description, state_event, labels, assignee_id,
       });
     } else {
       updated = {
         gitlab_iid: Number(req.params.iid),
         title: title !== undefined ? title : existing.rows[0].title,
-        description: description !== undefined ? description : existing.rows[0].description,
+        description: effectiveDescription !== undefined ? effectiveDescription : existing.rows[0].description,
         state: state_event === 'close' ? 'closed' : state_event === 'reopen' ? 'opened' : oldState,
       };
     }
@@ -295,10 +310,12 @@ router.get('/projects/:id/issues/:iid/comments', loadProjectRole, requireProject
   }
 });
 
-// Liefert die Felder, die in der GitLab-Issue-Ansicht angezeigt werden:
-// alle pp-Felder, die im Tracker-Mapping (Pull-Richtung) auf ein GitLab-Feld
-// gemappt sind, plus alle Custom Fields, die der Projektmanager f\u00fcr das
-// Projekt aktiviert hat.
+// Liefert die Felder, die in der Issue-Ansicht angezeigt werden:
+// alle pp-Felder, die im Tracker-Mapping (Pull-Richtung) auf ein Tracker-Feld
+// gemappt sind, plus ALLE Custom Fields des Projekts (immer anzeigen).
+// Custom-Field-Werte werden dynamisch aus dem Issue-Body gelesen:
+// zuerst aus dem pp-meta-JSON-Block bzw. der "## Zusatzfelder"-Markdown-Tabelle,
+// alternativ aus einem gemappten Tracker-Feld (z. B. Label "Name: Wert").
 router.get('/projects/:id/issues/:iid/fields', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
   try {
     const { rows } = await db.query(
@@ -308,7 +325,12 @@ router.get('/projects/:id/issues/:iid/fields', loadProjectRole, requireProjectPe
     if (!rows.length) {
       return res.status(404).json({ error: 'Issue nicht gefunden' });
     }
-    const mappings = await trackerFieldMapping.getMappings('gitlab');
+    const { rows: projRows } = await db.query(
+      'SELECT issue_tracker_type FROM projects WHERE id = $1',
+      [req.params.id]
+    );
+    const trackerType = (projRows[0] && projRows[0].issue_tracker_type) || 'gitlab';
+    const mappings = await trackerFieldMapping.getMappings(trackerType);
     const pull = mappings.filter(m => m.direction === 'pull' || m.direction === 'both');
     const projectDefs = await customFields.getProjectFieldDefinitions(req.params.id);
     const mappedCustomIds = new Set(
@@ -324,15 +346,37 @@ router.get('/projects/:id/issues/:iid/fields', loadProjectRole, requireProjectPe
         label: (trackerFieldMapping.PP_FIELDS.find(f => f.value === m.pp_field) || {}).label || m.pp_field,
         kind: 'pp',
       }));
+    const raw = rows[0].raw_data && typeof rows[0].raw_data === 'object'
+      ? rows[0].raw_data
+      : { title: rows[0].title, description: rows[0].description, state: rows[0].state };
+    const rawBody = raw.body !== undefined ? raw.body : (raw.description || '');
+    const parsed = taskMarkdown.markdownToTaskFields(rawBody, { customFieldDefs: projectDefs });
+    const metaCf = (parsed.meta && parsed.meta.custom_fields) || {};
+    const labelList = Array.isArray(raw.labels)
+      ? raw.labels.map(l => (typeof l === 'string' ? l : l && l.name)).filter(Boolean)
+      : [];
     for (const def of projectDefs) {
       const id = String(def.id);
+      let value = parsed.customFields[id] !== undefined ? parsed.customFields[id] : metaCf[id];
+      if (value === undefined && mappedCustomIds.has(id)) {
+        const prefix = `${def.name}: `;
+        const hit = labelList.find(l => l.startsWith(prefix));
+        if (hit) {
+          const rawVal = hit.slice(prefix.length);
+          if (def.field_type === 'checkbox') value = rawVal === 'true' || rawVal === '1' || rawVal === 'Ja' || rawVal === '\u2705';
+          else if (def.field_type === 'number') { const n = Number(rawVal); value = isNaN(n) ? rawVal : n; }
+          else value = rawVal;
+        }
+      }
       fields.push({
         pp_field: `${trackerFieldMapping.CUSTOM_FIELD_PREFIX}${id}`,
         label: def.name,
         kind: 'custom_field',
         field_type: def.field_type,
         options: def.options || [],
+        is_required: def.is_required,
         is_mapped: mappedCustomIds.has(id),
+        value: value !== undefined ? value : null,
       });
     }
     res.json({ fields, raw: rows[0].raw_data || null });
