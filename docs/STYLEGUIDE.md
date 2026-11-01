@@ -108,6 +108,23 @@ Prioritäten: `.badge-priority-low/normal/high/critical` (Farben siehe Prioritä
 - `#sync-indicator`: Sync-Statusanzeige
 - `.theme-toggle`: Dark/Light-Umschalter in der Topbar (Theme via `body.light` + `localStorage` `pp-theme`)
 
+### Interaktiver Styleguide (`#styleguide-view`, Link im `.app-footer`)
+
+Die Seite rendert alle Komponenten mit den echten Klassen und ist über den Footer-Link
+erreichbar (`public/js/styleguide.js`). Änderbare Felder wirken live auf `body` bzw. ein
+Override-Stylesheet (`#sg-overrides`) und werden nicht persistiert.
+
+| Klasse / ID | Verwendung |
+|---|---|
+| `#styleguide-view` | Eigene View (im `VIEWS`-Array in `app.js` registriert) |
+| `.sg-swatches` / `.sg-swatch` (+ `-color` / `-name` / `-value`) | Token-Swatches aller `:root`-Farben inkl. Live-Wert |
+| `.sg-controls` | Grid der änderbaren Felder (Color-Picker + Number-Inputs) |
+| `.sg-row` | Horizontale Demo-Zeile (Buttons, Badges, Pills) |
+| `.sg-code` (`#sg-token-output`) | Generiertes CSS-Snippet der geänderten Tokens (kopierbar) |
+| `#sg-token-accent` / `#sg-token-accent-hover` / `#sg-token-danger` | Color-Picker, schreiben die Tokens live auf `body` |
+| `#sg-radius` / `#sg-btn-padding` / `#sg-font-size` | Number-Inputs für Radius, Button-Padding, Grundschriftgröße (`html { font-size }`) |
+| `#sg-reset-tokens` / `#sg-copy-css` / `#sg-copy-msg` | Zurücksetzen, CSS kopieren, Kopier-Feedback |
+
 ### Issue-Erfassung / Formular-Pattern
 
 Verbindliche Klassen für GitHub-analoge Eingabeformulare mit projektbezogenen Zusatzfeldern (2-Spalten-Layout: Details links, Metadaten rechts):
@@ -137,3 +154,4 @@ Die Detailansicht eines externen Issues (`#gitlab-issue-view`) folgt demselben C
 2. Neue Komponenten grundsätzlich mit bestehenden Klassen bauen; nur wenn nötig, neue Klasse in `style.css` ergänzen **und hier dokumentieren**.
 3. Dark und Light Theme müssen beide funktionieren (`body.light` überschreibt die Tokens).
 4. Design-Prototypen wurden nach Auswahl des Layouts aus `main` entfernt; verbindliche Vorgaben stehen in diesem Dokument.
+5. Der interaktive Styleguide (`#styleguide-view`) zeigt ausschließlich die hier dokumentierten Klassen; Demo-Inhalte dürfen keine produktiven IDs wiederverwenden (außer `#sync-indicator`-Platzhalter).

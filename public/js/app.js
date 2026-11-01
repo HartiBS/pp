@@ -75,7 +75,7 @@ function setUser(user) {
   }
 }
 
-const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view', 'gitlab-projects-view', 'task-detail-view', 'my-tasks-view'];
+const VIEWS = ['auth-view', 'dashboard-view', 'project-detail-view', 'profile-view', 'admin-view', 'gitlab-issue-view', 'gitlab-projects-view', 'task-detail-view', 'my-tasks-view', 'styleguide-view'];
 
 function show(viewId) {
   for (const id of VIEWS) {
