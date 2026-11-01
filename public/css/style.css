@@ -1463,3 +1463,63 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
 /* Erfolgsmeldung */
 .msg-success { font-size: 0.75rem; color: var(--success); }
+
+/* ===== INTERAKTIVER STYLEGUIDE ===== */
+.sg-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.75rem;
+}
+
+.sg-swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+}
+
+.sg-swatch-color {
+  height: 44px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.sg-swatch-name { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-swatch-value { color: var(--text-faint); }
+
+.sg-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.sg-controls input[type="color"] {
+  padding: 0.15rem;
+  height: 2.4rem;
+  cursor: pointer;
+}
+
+.sg-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sg-code {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+#styleguide-view .card > .card-content > form,
+#sg-form-demo { max-width: 640px; }
+
+.app-footer a { color: var(--text-faint); }
+.app-footer a:hover { color: var(--accent-light); }
