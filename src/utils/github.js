@@ -101,7 +101,8 @@ async function githubRequest(path, { method = 'GET', body, projectSettings } = {
 function mapGitHubIssue(issue) {
   return {
     gitlab_iid: issue.number, // kompatibel: number statt iid
-    tracker_node_id: issue.node_id || (issue.id != null ? String(issue.id) : null),
+    // Identifier zur Synchronisation: nur die #-Nummer (z. B. "#42")
+    tracker_node_id: issue.number != null ? `#${issue.number}` : null,
     github_number: issue.number,
     title: issue.title,
     description: issue.body || '',

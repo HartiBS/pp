@@ -185,6 +185,16 @@ router.put('/projects/:id/issues/:iid', loadProjectRole, requireProjectPermissio
     if (!existing.rows.length) {
       return res.status(404).json({ error: 'Issue nicht gefunden' });
     }
+    // Sobald der Sync einmal aktiviert war, darf er nicht mehr ausgeschaltet werden
+    if (auto_sync === false) {
+      const { rows: t } = await db.query(
+        'SELECT sync_active FROM tasks WHERE project_id = $1 AND gitlab_iid = $2',
+        [req.params.id, req.params.iid]
+      );
+      if (t.length > 0 && t[0].sync_active) {
+        return res.status(400).json({ error: 'Sync wurde bereits aktiviert und kann nicht mehr deaktiviert werden' });
+      }
+    }
     const oldState = existing.rows[0].state;
 
     let updated;

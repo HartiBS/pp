@@ -77,29 +77,45 @@ function taskToMarkdown(task, { customFieldDefs = [], subtasks = [], parent = nu
   lines.push(`${META_START}${JSON.stringify(meta)}${META_END}`);
   lines.push('');
 
-  // Menschenlesbarer Metadaten-Bereich (nur Felder, die nicht extern gemappt sind)
-  const hasMetaLines = meta.issue_type || meta.status || meta.priority || meta.due_date ||
-    meta.estimated_hours != null || meta.spent_hours != null || (meta.labels && meta.labels.length > 0);
-  if (hasMetaLines) {
-    lines.push('---');
+  // Menschenlesbarer Metadaten-Bereich (nur Felder, die nicht extern gemappt sind):
+  // jedes Feld als eigene Markdown-Überschrift mit dem Wert darunter.
+  if (meta.issue_type) {
+    lines.push('## Typ');
     lines.push('');
-    if (meta.issue_type) lines.push(`**Typ:** ${TYPE_LABELS[meta.issue_type] || meta.issue_type}  `);
-    if (meta.status) lines.push(`**Status:** ${STATUS_LABELS[meta.status] || meta.status}  `);
-    if (meta.priority) lines.push(`**Priorität:** ${PRIORITY_LABELS[meta.priority] || meta.priority}`);
-    if (meta.due_date) {
-      lines.push(`**Fällig:** ${meta.due_date}  `);
-    }
-    if (meta.estimated_hours != null || meta.spent_hours != null) {
-      const parts = [];
-      if (meta.estimated_hours != null) parts.push(`Geschätzt: ${meta.estimated_hours}h`);
-      if (meta.spent_hours != null) parts.push(`Aufgewendet: ${meta.spent_hours}h`);
-      lines.push(`**Zeit:** ${parts.join(' · ')}  `);
-    }
-    if (meta.labels && meta.labels.length > 0) {
-      lines.push(`**Labels:** ${meta.labels.map(l => `\`${l}\``).join(' ')}`);
-    }
+    lines.push(TYPE_LABELS[meta.issue_type] || meta.issue_type);
     lines.push('');
-    lines.push('---');
+  }
+  if (meta.status) {
+    lines.push('## Status');
+    lines.push('');
+    lines.push(STATUS_LABELS[meta.status] || meta.status);
+    lines.push('');
+  }
+  if (meta.priority) {
+    lines.push('## Priorität');
+    lines.push('');
+    lines.push(PRIORITY_LABELS[meta.priority] || meta.priority);
+    lines.push('');
+  }
+  if (meta.due_date) {
+    lines.push('## Fälligkeitsdatum');
+    lines.push('');
+    lines.push(meta.due_date);
+    lines.push('');
+  }
+  if (meta.estimated_hours != null || meta.spent_hours != null) {
+    const parts = [];
+    if (meta.estimated_hours != null) parts.push(`Geschätzt: ${meta.estimated_hours}h`);
+    if (meta.spent_hours != null) parts.push(`Aufgewendet: ${meta.spent_hours}h`);
+    lines.push('## Zeiterfassung');
+    lines.push('');
+    lines.push(parts.join(' · '));
+    lines.push('');
+  }
+  if (meta.labels && meta.labels.length > 0) {
+    lines.push('## Labels');
+    lines.push('');
+    lines.push(meta.labels.map(l => `\`${l}\``).join(' '));
     lines.push('');
   }
 
@@ -111,21 +127,17 @@ function taskToMarkdown(task, { customFieldDefs = [], subtasks = [], parent = nu
     lines.push('');
   }
 
-  // Custom Fields
-  if (customFieldDefs.length > 0 && Object.keys(meta.custom_fields).length > 0) {
-    lines.push('## Zusatzfelder');
+  // Custom Fields: jedes Feld als eigene Markdown-Überschrift mit dem Wert darunter
+  for (const def of customFieldDefs) {
+    const key = String(def.id);
+    const value = meta.custom_fields[key];
+    if (value === null || value === undefined) continue;
+    const displayValue = def.field_type === 'checkbox'
+      ? (value ? '✅ Ja' : '❌ Nein')
+      : String(value);
+    lines.push(`## ${def.name}`);
     lines.push('');
-    lines.push('| Feld | Wert |');
-    lines.push('|------|------|');
-    for (const def of customFieldDefs) {
-      const key = String(def.id);
-      const value = meta.custom_fields[key];
-      if (value === null || value === undefined) continue;
-      const displayValue = def.field_type === 'checkbox'
-        ? (value ? '✅ Ja' : '❌ Nein')
-        : String(value);
-      lines.push(`| ${escapeMd(def.name)} | ${escapeMd(displayValue)} |`);
-    }
+    lines.push(displayValue);
     lines.push('');
   }
 
