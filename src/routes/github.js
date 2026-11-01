@@ -137,7 +137,13 @@ router.post('/projects/:id/issues', loadProjectRole, requireProjectPermission('c
 });
 
 router.put('/projects/:id/issues/:number', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
-  const { title, description, state_event } = req.body;
+  const { title, description, state_event, labels, assignees } = req.body;
+  if (labels !== undefined && !Array.isArray(labels)) {
+    return res.status(400).json({ error: 'labels muss ein Array sein' });
+  }
+  if (assignees !== undefined && !Array.isArray(assignees)) {
+    return res.status(400).json({ error: 'assignees muss ein Array sein' });
+  }
   try {
     const { rows } = await db.query(
       'SELECT github_repo FROM projects WHERE id = $1 AND issue_tracker_type = $2',
@@ -147,7 +153,7 @@ router.put('/projects/:id/issues/:number', loadProjectRole, requireProjectPermis
       return res.status(400).json({ error: 'Projekt ist nicht mit GitHub verknüpft' });
     }
     const updated = await github.updateGitHubIssue(rows[0].github_repo, Number(req.params.number), {
-      title, description, state_event,
+      title, description, state_event, labels, assignees,
     });
     await db.query(
       `UPDATE gitlab_issues SET title = $1, description = $2, state = $3, synced_at = NOW()
@@ -155,6 +161,40 @@ router.put('/projects/:id/issues/:number', loadProjectRole, requireProjectPermis
       [updated.title, updated.description, updated.state, req.params.id, Number(req.params.number)]
     );
     res.json({ issue: updated });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+router.get('/projects/:id/labels', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      'SELECT github_repo FROM projects WHERE id = $1 AND issue_tracker_type = $2',
+      [req.params.id, 'github']
+    );
+    if (rows.length === 0 || !rows[0].github_repo) {
+      return res.status(400).json({ error: 'Projekt ist nicht mit GitHub verknüpft' });
+    }
+    const labels = await github.listGitHubLabels(rows[0].github_repo);
+    res.json({ labels: (labels || []).map(l => ({ name: l.name, color: l.color || null })) });
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+router.get('/projects/:id/github-users', loadProjectRole, requireProjectPermission('view_project'), async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      'SELECT github_repo FROM projects WHERE id = $1 AND issue_tracker_type = $2',
+      [req.params.id, 'github']
+    );
+    if (rows.length === 0 || !rows[0].github_repo) {
+      return res.status(400).json({ error: 'Projekt ist nicht mit GitHub verknüpft' });
+    }
+    const users = await github.listGitHubUsers(rows[0].github_repo);
+    res.json({ github_users: users });
   } catch (err) {
     console.error(err);
     res.status(502).json({ error: err.message });

@@ -574,7 +574,6 @@
             <span class="section-label">Zusatzfelder</span>
             <div id="gi-custom-fields" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
             <hr class="separator">
-            <button id="gi-close-btn" class="btn-block">Schließen</button>
             <button id="gi-reopen-btn" class="btn-secondary btn-block" hidden>Wiedereröffnen</button>
             <button id="gi-edit-btn" class="btn-secondary btn-block">Bearbeiten</button>
             <a id="gi-web-link" href="#" target="_blank" rel="noopener" style="text-align:center; font-size:0.875rem;">In GitLab öffnen ↗</a>
@@ -584,8 +583,16 @@
       <form id="gi-edit-form" hidden style="margin-top:1rem;">
         <label>Titel <input type="text" name="title" required></label>
         <label>Beschreibung <textarea name="description"></textarea></label>
+        <div class="field">
+          <label>Labels</label>
+          <div id="gi-edit-label-pills" class="label-pill-row"></div>
+          <small style="color:var(--text-muted);">Verfügbare Labels des Trackers – anklicken zum Zu- bzw. Abwählen.</small>
+        </div>
+        <label>Bearbeiter
+          <select name="assignee_id" id="gi-edit-assignee-select"></select>
+        </label>
         <div style="display:flex; gap:0.75rem;">
-          <button type="submit">In GitLab speichern</button>
+          <button type="submit">Im Tracker speichern</button>
           <button type="button" id="gi-edit-cancel-btn" class="btn-secondary">Abbrechen</button>
         </div>
       </form>

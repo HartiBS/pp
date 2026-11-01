@@ -1398,6 +1398,12 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
   border-color: var(--text);
 }
 
+.label-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
 /* Assignee-Auswahl mit rundem Initial-Avatar */
 .assignee-row {
   display: flex;
