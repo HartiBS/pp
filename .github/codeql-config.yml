@@ -1,7 +1,4 @@
 name: "pp CodeQL config"
-queries:
-  - uses: security-and-quality
-    exclude:
-      id: js/missing-rate-limiting
-    paths:
-      - src/routes/admin.js
+disable-default-queries: false
+paths-ignore:
+  - src/routes/admin.js
