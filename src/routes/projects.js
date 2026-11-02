@@ -325,8 +325,8 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
     }
 
     const { rows } = await db.query(
-      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, gitlab_iid, priority, estimated_hours, created_by, custom_fields)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+      `INSERT INTO tasks (project_id, title, description, assignee_id, issue_type, labels, due_date, epic_id, milestone_id, gitlab_iid, priority, estimated_hours, created_by, custom_fields, sync_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING *`,
       [
         req.params.id,
         title,
@@ -342,6 +342,7 @@ router.post('/:id/tasks', loadProjectRole, requireProjectPermission('create_task
         estHours,
         req.session.userId,
         cleanedCustomFields,
+        gitlabIid != null, // Sync einmal aktiviert -> nicht mehr abschaltbar
       ]
     );
     const newTask = rows[0];
@@ -388,6 +389,11 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
     const gitlabProjectId = oldTask.gitlab_project_id;
     // #83: projektweiter Auto-Sync-Default (an, sofern nicht explizit deaktiviert)
     const projectAutoSync = oldTask.auto_sync !== false;
+    // Sobald der Sync einmal aktiviert war, darf er nicht mehr ausgeschaltet werden
+    const syncLocked = oldTask.sync_active === true || oldTask.gitlab_iid != null;
+    if (syncLocked && auto_sync === false) {
+      return res.status(400).json({ error: 'Sync wurde bereits aktiviert und kann nicht mehr deaktiviert werden' });
+    }
     const effectiveAutoSync = auto_sync !== undefined && auto_sync !== null ? auto_sync : projectAutoSync;
 
     // #65: Erledigte Tasks mit offenen Subtasks können nicht auf "done" gesetzt werden
@@ -485,9 +491,10 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
             customFieldDefs: activeCfDefs, subtasks, parent, children, related,
           });
           const created = await issueTracker.createIssue(tracker, payload);
-          // gitlab_iid setzen
-          await db.query('UPDATE tasks SET gitlab_iid = $1 WHERE id = $2', [created.gitlab_iid, updatedTask.id]);
+          // gitlab_iid + sync_active setzen (Sync nicht mehr abschaltbar)
+          await db.query('UPDATE tasks SET gitlab_iid = $1, sync_active = TRUE WHERE id = $2', [created.gitlab_iid, updatedTask.id]);
           updatedTask.gitlab_iid = created.gitlab_iid;
+          updatedTask.sync_active = true;
           await db.query(
             `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
              VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
@@ -534,6 +541,7 @@ router.put('/:id/tasks/:taskId', loadProjectRole, requireProjectPermission('edit
           }
           if (Object.keys(trackerUpdate).length > 0) {
             const updated = await issueTracker.updateIssue(tracker, extId, trackerUpdate);
+            await db.query('UPDATE tasks SET sync_active = TRUE WHERE id = $1 AND sync_active = FALSE', [updatedTask.id]);
             await db.query(
               `INSERT INTO gitlab_issues (project_id, gitlab_iid, title, description, state, web_url, synced_at)
                VALUES ($1, $2, $3, $4, $5, $6, NOW())

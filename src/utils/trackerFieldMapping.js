@@ -70,7 +70,7 @@ const DIRECTIONS = ['both', 'push', 'pull'];
 
 // Felder der externen API, die nie als "ungenutzt" ins Markdown wandern
 const IGNORE_RAW_FIELDS = new Set([
-  'id', 'iid', 'number', 'project_id', 'web_url', 'html_url', 'url',
+  'id', 'iid', 'number', 'node_id', 'node', 'project_id', 'web_url', 'html_url', 'url',
   'created_at', 'updated_at', 'closed_at', 'merged_at', 'author', 'user',
   'pull_request', 'comments', 'references', '_links', 'task_completion_status',
   'blocking_issues_count', 'body_html', 'imported', 'imported_from',
@@ -333,9 +333,12 @@ function collectUnmapped(raw, mappedTrackerFields, trackerType) {
 function unmappedToMarkdown(unmapped, trackerType) {
   if (!unmapped.length) return '';
   const name = trackerType === 'github' ? 'GitHub' : 'GitLab';
-  const lines = ['', `## Zusatzdaten aus ${name} (nicht gemappt)`, '', '| Feld | Wert |', '|------|------|'];
+  const lines = ['', `## Zusatzdaten aus ${name} (nicht gemappt)`];
   for (const [k, v] of unmapped) {
-    lines.push(`| ${taskMarkdown.escapeMd(k)} | ${taskMarkdown.escapeMd(v)} |`);
+    lines.push('');
+    lines.push(`### ${taskMarkdown.escapeMd(k)}`);
+    lines.push('');
+    lines.push(taskMarkdown.escapeMd(v));
   }
   return lines.join('\n');
 }

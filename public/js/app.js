@@ -356,7 +356,8 @@ function renderTaskList(tasks, readonly, projectId) {
     const labelsHtml = (t.labels || []).map(l => `<span class="badge badge-todo" style="margin-right:0.25rem;">${l}</span>`).join('');
     const dueHtml = t.due_date ? ` <small>📅 ${t.due_date}</small>` : '';
     const typeBadge = `<span class="badge">${ISSUE_TYPE_LABELS[t.issue_type] || t.issue_type}</span>`;
-    const gitlabBadge = t.gitlab_iid ? ` <span class="badge badge-active" title="Mit GitLab synchronisiert">GL #${t.gitlab_iid}</span>` : '';
+    const trackerPrefix = state.currentProject && state.currentProject.issue_tracker_type === 'github' ? 'GH' : 'GL';
+    const gitlabBadge = t.gitlab_iid ? ` <span class="badge badge-active" title="Synchronisiert">${trackerPrefix} #${t.gitlab_iid}</span>` : '';
     li.innerHTML = `<span>${typeBadge}${gitlabBadge} ${t.title}${t.assignee_name ? ` <small>(${t.assignee_name})</small>` : ''}${dueHtml}<br>${labelsHtml}</span>`;
     if (!readonly) {
       const select = document.createElement('select');
@@ -1571,7 +1572,7 @@ document.addEventListener('submit', async (e) => {
     } else {
       body.assignee_id = fd.get('assignee_id') ? Number(fd.get('assignee_id')) : null;
     }
-    body.auto_sync = state.currentProject && state.currentProject.auto_sync !== false;
+    body.auto_sync = issueAutoSyncValue(issue);
     try {
       const { issue: updated } = await api(`${base}/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
         method: 'PUT',
@@ -1586,11 +1587,19 @@ document.addEventListener('submit', async (e) => {
   }
 });
 
+// auto_sync-Wert fuer Issue-PUTs: bei bereits aktiviertem Sync (gesperrt) immer true,
+// damit der Server die Sperre nicht als Deaktivierung wertet.
+function issueAutoSyncValue(issue) {
+  const linked = (state.allTasks || []).find(t => t.gitlab_iid === issue.gitlab_iid);
+  if (linked && (linked.sync_active || linked.gitlab_iid != null)) return true;
+  return state.currentProject && state.currentProject.auto_sync !== false;
+}
+
 bind('#gi-reopen-btn', async () => {
   const issue = state.currentGitLabIssue;
   try {
     await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}`, {
-      method: 'PUT', body: { state_event: 'reopen', auto_sync: state.currentProject && state.currentProject.auto_sync !== false },
+      method: 'PUT', body: { state_event: 'reopen', auto_sync: issueAutoSyncValue(issue) },
     });
     await loadGitLabIssue({ ...issue, state: 'opened' });
     await loadGitLabIssues(state.currentProject.id);
@@ -1735,8 +1744,9 @@ function renderTaskDetail(data) {
   const glBadge = $('#td-gitlab-badge');
   const glLink = $('#td-gitlab-link');
   if (task.gitlab_iid) {
+    const trackerPrefix = state.currentProject && state.currentProject.issue_tracker_type === 'github' ? 'GH' : 'GL';
     glBadge.hidden = false;
-    glBadge.textContent = `GL #${task.gitlab_iid}`;
+    glBadge.textContent = `${trackerPrefix} #${task.gitlab_iid}`;
     glLink.hidden = false;
   } else {
     glBadge.hidden = true;
@@ -1751,7 +1761,13 @@ function renderTaskDetail(data) {
       (state.currentProject.gitlab_project_id || state.currentProject.github_repo));
     tdAutoSyncLabel.hidden = !hasTracker;
     const cb = tdAutoSyncLabel.querySelector('input[name="auto_sync"]');
-    if (cb) cb.checked = state.currentProject.auto_sync !== false;
+    if (cb) {
+      // Wurde der Sync einmal aktiviert, darf er nicht mehr ausgeschaltet werden
+      const locked = task.sync_active === true || task.gitlab_iid != null;
+      cb.checked = locked ? true : state.currentProject.auto_sync !== false;
+      cb.disabled = locked;
+      if (locked) tdAutoSyncLabel.title = 'Sync wurde bereits aktiviert und kann nicht mehr deaktiviert werden';
+    }
   }
 
   // Watch button
@@ -1996,7 +2012,8 @@ function bindTaskDetailEvents() {
             spent_hours: fd.get('spent_hours') || null,
             labels,
             custom_fields: customFields,
-            auto_sync: fd.get('auto_sync') === 'on',
+            // Bei bereits aktiviertem Sync (gesperrt) wird true gesendet, damit der Server nicht ablehnt
+            auto_sync: fd.get('auto_sync') === 'on' || !!(state.currentTask && state.currentTask.task && (state.currentTask.task.sync_active || state.currentTask.task.gitlab_iid)),
           },
         });
         $('#td-msg').textContent = '✅ Gespeichert';
