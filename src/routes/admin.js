@@ -285,8 +285,7 @@ router.delete('/custom-fields/:id', async (req, res) => {
 });
 
 // Matrix: Projekte (Zeilen) x Custom-Field-Definitionen (Spalten) mit Aktiv-Status
-// lgtm[js/missing-rate-limiting] Admin-only route (router.use requireRole('admin') + CSRF); same protection as all other admin routes
-router.get('/custom-fields/matrix', async (req, res) => {
+router.get('/custom-fields/matrix', async (req, res) => { // lgtm[js/missing-rate-limiting] admin-only route
   try {
     const { rows: projects } = await db.query(
       `SELECT p.id, p.name FROM projects p ORDER BY p.name ASC`
@@ -311,8 +310,7 @@ router.get('/custom-fields/matrix', async (req, res) => {
 });
 
 // Matrix speichern: { matrix: [{ project_id, field_definition_id, is_enabled }] }
-// lgtm[js/missing-rate-limiting] Admin-only route (router.use requireRole('admin') + CSRF); same protection as all other admin routes
-router.put('/custom-fields/matrix', async (req, res) => {
+router.put('/custom-fields/matrix', async (req, res) => { // lgtm[js/missing-rate-limiting] admin-only route
   const { matrix } = req.body;
   if (!Array.isArray(matrix)) {
     return res.status(400).json({ error: 'matrix muss ein Array sein' });
