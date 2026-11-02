@@ -15,17 +15,17 @@ const USER_FIELDS = 'id, email, username, first_name, last_name, name, is_active
 
 router.use(requireAuth, requireRole('admin'));
 
-// Einfaches Rate-Limiting (In-Memory, pro User): max. 60 Requests/Minute fuer die Admin-API
-const adminRateLimit = new Map();
+// Einfaches Rate-Limiting (In-Memory, pro Route): max. 60 Requests/Minute fuer die Admin-API
+const adminRouteHits = new Map();
 router.use((req, res, next) => {
   const now = Date.now();
   const windowMs = 60 * 1000;
   const max = 60;
-  const key = req.currentUser ? String(req.currentUser.id) : req.ip;
-  let entry = adminRateLimit.get(key);
+  const key = req.route ? `${req.method} ${req.route.path}` : `${req.method} ${req.path}`;
+  let entry = adminRouteHits.get(key);
   if (!entry || now - entry.start > windowMs) {
     entry = { start: now, count: 0 };
-    adminRateLimit.set(key, entry);
+    adminRouteHits.set(key, entry);
   }
   entry.count += 1;
   if (entry.count > max) {
