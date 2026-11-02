@@ -285,7 +285,7 @@ router.delete('/custom-fields/:id', async (req, res) => {
 });
 
 // Matrix: Projekte (Zeilen) x Custom-Field-Definitionen (Spalten) mit Aktiv-Status
-// codeql[js/missing-rate-limiting] Admin-only route (router.use requireRole('admin') + CSRF); same protection as all other admin routes
+// lgtm[js/missing-rate-limiting] Admin-only route (router.use requireRole('admin') + CSRF); same protection as all other admin routes
 router.get('/custom-fields/matrix', async (req, res) => {
   try {
     const { rows: projects } = await db.query(
@@ -311,7 +311,7 @@ router.get('/custom-fields/matrix', async (req, res) => {
 });
 
 // Matrix speichern: { matrix: [{ project_id, field_definition_id, is_enabled }] }
-// codeql[js/missing-rate-limiting] Admin-only route (router.use requireRole('admin') + CSRF); same protection as all other admin routes
+// lgtm[js/missing-rate-limiting] Admin-only route (router.use requireRole('admin') + CSRF); same protection as all other admin routes
 router.put('/custom-fields/matrix', async (req, res) => {
   const { matrix } = req.body;
   if (!Array.isArray(matrix)) {
