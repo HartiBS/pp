@@ -15,6 +15,25 @@ const USER_FIELDS = 'id, email, username, first_name, last_name, name, is_active
 
 router.use(requireAuth, requireRole('admin'));
 
+// Einfaches Rate-Limiting (In-Memory, pro User): max. 60 Requests/Minute fuer die Admin-API
+const adminRateLimit = new Map();
+router.use((req, res, next) => {
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const max = 60;
+  const key = req.currentUser ? String(req.currentUser.id) : req.ip;
+  let entry = adminRateLimit.get(key);
+  if (!entry || now - entry.start > windowMs) {
+    entry = { start: now, count: 0 };
+    adminRateLimit.set(key, entry);
+  }
+  entry.count += 1;
+  if (entry.count > max) {
+    return res.status(429).json({ error: 'Zu viele Anfragen. Bitte kurz warten.' });
+  }
+  next();
+});
+
 async function attachRoles(users) {
   const result = [];
   for (const u of users) {
@@ -285,7 +304,6 @@ router.delete('/custom-fields/:id', async (req, res) => {
 });
 
 // Matrix: Projekte (Zeilen) x Custom-Field-Definitionen (Spalten) mit Aktiv-Status
-// codeql[js/missing-rate-limiting] Admin-only route: requireAuth + requireRole('admin') + CSRF wie alle Admin-Routen
 router.get('/custom-fields/matrix', async (req, res) => {
   try {
     const { rows: projects } = await db.query(
@@ -311,7 +329,6 @@ router.get('/custom-fields/matrix', async (req, res) => {
 });
 
 // Matrix speichern: { matrix: [{ project_id, field_definition_id, is_enabled }] }
-// codeql[js/missing-rate-limiting] Admin-only route: requireAuth + requireRole('admin') + CSRF wie alle Admin-Routen
 router.put('/custom-fields/matrix', async (req, res) => {
   const { matrix } = req.body;
   if (!Array.isArray(matrix)) {
