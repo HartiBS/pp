@@ -276,6 +276,17 @@ form {
   border-radius: 10px;
 }
 
+/* Task-Detail-Maske im Anzeige-Modus: Felder deaktiviert, dezent dargestellt */
+#td-edit-form input:disabled,
+#td-edit-form select:disabled,
+#td-edit-form textarea:disabled {
+  background: transparent;
+  color: var(--text);
+  opacity: 0.85;
+  cursor: default;
+  border-color: transparent;
+}
+
 /* Formulare innerhalb von Karten (Task-Masken) ohne eigene Box */
 .card-content form {
   background: transparent;
