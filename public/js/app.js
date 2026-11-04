@@ -2366,14 +2366,18 @@ function renderCustomFieldTable(definitions) {
 
 function bindCustomFieldAdminEvents() {
   // Type select changes -> show/hide options input
-  bind('#cf-type-select', 'change', (e) => {
-    const isDropdown = e.target.value === 'dropdown';
-    $('#cf-options-label').hidden = !isDropdown;
-    $('#cf-options-input').required = isDropdown;
-  });
+  const cfTypeSelect = $('#cf-type-select');
+  if (cfTypeSelect) {
+    cfTypeSelect.addEventListener('change', (e) => {
+      const isDropdown = e.target.value === 'dropdown';
+      $('#cf-options-label').hidden = !isDropdown;
+      $('#cf-options-input').required = isDropdown;
+    });
+  }
 
-  // Form submit (create or update)
-  bind('submit', async (e) => {
+  // Form submit (create or update) – explizit addEventListener, damit der
+  // Handler unabhängig vom bind()-Helfer zuverlässig registriert wird
+  document.addEventListener('submit', async (e) => {
     if (e.target.id === 'custom-field-form') {
       e.preventDefault();
       const fd = new FormData(e.target);
