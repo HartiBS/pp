@@ -1531,3 +1531,25 @@ input::placeholder, textarea::placeholder { color: var(--text-faint); }
 
 .app-footer a { color: var(--text-faint); }
 .app-footer a:hover { color: var(--accent-light); }
+
+/* Custom-Field-Maske (Modal) */
+#cf-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+#cf-mask[hidden] { display: none; }
+#cf-mask .cf-mask-dialog {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  min-width: 320px;
+  max-width: 90vw;
+  box-shadow: 0 10px 30px var(--shadow);
+}
+#cf-mask .cf-mask-dialog h3 { margin-top: 0; }

@@ -171,30 +171,36 @@
       <div id="admin-tab-custom-fields" hidden>
       <h2>Custom Fields (Zusatzfelder)</h2>
       <p style="color:var(--text-muted); font-size:0.875rem;">Definiere globale Zusatzfelder, die pro Projekt aktiviert werden können. Sobald ein Feld einem Projekt zugewiesen ist, kann es nicht mehr gelöscht werden.</p>
-      <form id="custom-field-form">
-        <input type="hidden" name="id">
-        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
-          <label>Name <input type="text" name="name" placeholder="z. B. Story Points" required maxlength="100"></label>
-          <label>Typ
-            <select name="field_type" id="cf-type-select">
-              <option value="text">Text</option>
-              <option value="number">Zahl</option>
-              <option value="date">Datum</option>
-              <option value="checkbox">Checkbox</option>
-              <option value="dropdown">Dropdown</option>
-            </select>
-          </label>
-          <label id="cf-options-label" hidden>Optionen (kommagetrennt)
-            <input type="text" name="options" id="cf-options-input" placeholder="z. B. Klein, Mittel, Groß">
-          </label>
-          <label style="flex-direction:row; align-items:center;">
-            <input type="checkbox" name="is_required"> Pflichtfeld
-          </label>
-          <button type="submit" id="cf-submit-btn">+ Hinzufügen</button>
-          <button type="button" id="cf-cancel-btn" class="btn-secondary" hidden>Abbrechen</button>
+      <button type="button" id="cf-submit-btn">+ Custom Field hinzufügen</button>
+      <div id="cf-mask" hidden>
+        <div class="cf-mask-dialog" role="dialog" aria-modal="true" aria-labelledby="cf-mask-title">
+          <h3 id="cf-mask-title">Custom Field anlegen</h3>
+          <form id="custom-field-form">
+            <input type="hidden" name="id">
+            <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
+              <label>Name <input type="text" name="name" placeholder="z. B. Story Points" required maxlength="100"></label>
+              <label>Typ
+                <select name="field_type" id="cf-type-select">
+                  <option value="text">Text</option>
+                  <option value="number">Zahl</option>
+                  <option value="date">Datum</option>
+                  <option value="checkbox">Checkbox</option>
+                  <option value="dropdown">Dropdown</option>
+                </select>
+              </label>
+              <label id="cf-options-label" hidden>Optionen (kommagetrennt)
+                <input type="text" name="options" id="cf-options-input" placeholder="z. B. Klein, Mittel, Groß">
+              </label>
+              <label style="flex-direction:row; align-items:center;">
+                <input type="checkbox" name="is_required"> Pflichtfeld
+              </label>
+              <button type="submit" id="cf-save-btn">+ Hinzufügen</button>
+              <button type="button" id="cf-cancel-btn" class="btn-secondary">Abbrechen</button>
+            </div>
+          </form>
+          <p id="cf-msg"></p>
         </div>
-      </form>
-      <p id="cf-msg"></p>
+      </div>
       <table id="custom-field-table" style="margin-top:1rem;">
         <thead>
           <tr><th>Name</th><th>Typ</th><th>Optionen</th><th>Pflicht</th><th>Aktionen</th></tr>
