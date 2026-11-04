@@ -1542,6 +1542,7 @@ document.addEventListener('submit', async (e) => {
     const labels = (fd.get('labels') || '').split(',').map(s => s.trim()).filter(Boolean);
     const body = {
       title: fd.get('title'),
+      description: fd.get('description') || null,
       issue_type: fd.get('issue_type') || 'task',
       labels,
       due_date: fd.get('due_date') || null,
@@ -1551,9 +1552,11 @@ document.addEventListener('submit', async (e) => {
       auto_sync: fd.get('auto_sync') === 'on',
       priority: fd.get('priority') || 'normal',
       estimated_hours: fd.get('estimated_hours') || null,
+      custom_fields: collectTaskCreateCustomFields(),
     };
     await api(`/api/projects/${state.currentProject.id}/tasks`, { method: 'POST', body });
     e.target.reset();
+    renderTaskCreateCustomFields();
     await loadProject(state.currentProject.id);
   }
 });
@@ -2234,23 +2237,7 @@ function makeTasksClickable() {
 
 /* ===== PRIORITY IN TASK FORM (US-25) ===== */
 function enhanceTaskForm() {
-  const form = $('#task-form');
-  if (!form || form.dataset.enhanced) return;
-  form.dataset.enhanced = '1';
-  // Add priority select after issue_type select
-  const typeSelect = form.querySelector('select[name="issue_type"]');
-  if (typeSelect) {
-    const priorityLabel = document.createElement('select');
-    priorityLabel.name = 'priority';
-    priorityLabel.title = 'Priorität des Tasks';
-    priorityLabel.innerHTML = `
-      <option value="normal">Priorität: Normal</option>
-      <option value="low">Priorität: Niedrig</option>
-      <option value="high">Priorität: Hoch</option>
-      <option value="critical">Priorität: Kritisch</option>
-    `;
-    typeSelect.parentNode.insertBefore(priorityLabel, typeSelect.nextSibling);
-  }
+  // Priorität/Typ/etc. sind statisch im Formular verdrahtet – nichts mehr einzufügen.
 }
 
 /* ===== INIT TASK DETAIL EVENTS ===== */
@@ -2703,6 +2690,130 @@ function bindProjectCustomFieldsEvents() {
   });
 }
 
+/* ===== TASK CREATE FORM: Custom Fields ===== */
+
+function renderTaskCreateCustomFields() {
+  const container = $('#task-cf-container');
+  const inputsDiv = $('#task-cf-inputs');
+  if (!container || !inputsDiv) return;
+  const defs = state.currentProjectCustomFieldDefs || [];
+  if (!defs.length) {
+    container.hidden = true;
+    inputsDiv.innerHTML = '';
+    return;
+  }
+  container.hidden = false;
+  inputsDiv.innerHTML = '';
+  for (const def of defs) {
+    const fieldDiv = document.createElement('div');
+    fieldDiv.className = 'field';
+    const label = document.createElement('label');
+    label.textContent = def.name + (def.is_required ? ' *' : '');
+    fieldDiv.appendChild(label);
+    let el;
+    switch (def.field_type) {
+      case 'number':
+        el = document.createElement('input');
+        el.type = 'number'; el.step = 'any'; el.id = `new-cf-${def.id}`;
+        break;
+      case 'date':
+        el = document.createElement('input');
+        el.type = 'date'; el.id = `new-cf-${def.id}`;
+        break;
+      case 'checkbox':
+        el = document.createElement('input');
+        el.type = 'checkbox'; el.id = `new-cf-${def.id}`;
+        break;
+      case 'dropdown': {
+        el = document.createElement('select');
+        el.id = `new-cf-${def.id}`;
+        const empty = document.createElement('option');
+        empty.value = ''; empty.textContent = '—';
+        el.appendChild(empty);
+        for (const o of (def.options || [])) {
+          const opt = document.createElement('option');
+          opt.value = o; opt.textContent = o;
+          el.appendChild(opt);
+        }
+        break;
+      }
+      default:
+        el = document.createElement('input');
+        el.type = 'text'; el.id = `new-cf-${def.id}`;
+    }
+    el.dataset.fieldId = String(def.id);
+    el.dataset.fieldType = def.field_type;
+    fieldDiv.appendChild(el);
+    inputsDiv.appendChild(fieldDiv);
+  }
+}
+
+function collectTaskCreateCustomFields() {
+  const result = {};
+  const inputsDiv = $('#task-cf-inputs');
+  if (!inputsDiv) return result;
+  for (const el of inputsDiv.querySelectorAll('[id^="new-cf-"]')) {
+    const id = el.dataset.fieldId;
+    switch (el.dataset.fieldType) {
+      case 'number':
+        result[id] = el.value === '' ? null : Number(el.value);
+        break;
+      case 'checkbox':
+        result[id] = el.checked;
+        break;
+      default:
+        result[id] = el.value || null;
+    }
+  }
+  return result;
+}
+
+/* ===== TASK DETAIL VIEW: Anzeige-Modus (Read-only) + Bearbeiten-Toggle ===== */
+
+function renderTaskCustomFieldsView(customFieldDefs, taskCustomFields) {
+  const block = $('#td-view-custom-fields-block');
+  const box = $('#td-view-custom-fields');
+  if (!block || !box) return;
+  if (!customFieldDefs || !customFieldDefs.length) {
+    block.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  block.hidden = false;
+  box.innerHTML = '';
+  const values = taskCustomFields || {};
+  for (const def of customFieldDefs) {
+    const value = values[String(def.id)];
+    const fieldDiv = document.createElement('div');
+    fieldDiv.className = 'field';
+    const label = document.createElement('label');
+    label.textContent = def.name;
+    const val = document.createElement('span');
+    val.style.fontSize = '0.875rem';
+    val.textContent = giFormatCustomValue(def, value !== undefined ? value : null);
+    fieldDiv.appendChild(label);
+    fieldDiv.appendChild(val);
+    box.appendChild(fieldDiv);
+  }
+}
+
+bind('#td-edit-toggle-btn', () => {
+  const card = $('#td-edit-card');
+  if (!card) return;
+  card.hidden = !card.hidden;
+  if (!card.hidden) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+bind('#td-edit-cancel-btn', () => { $('#td-edit-card').hidden = true; });
+
+bind('#task-form-toggle-btn', () => {
+  const card = $('#task-form-card');
+  if (card) card.hidden = !card.hidden;
+});
+bind('#task-form-reset-btn', () => {
+  const form = $('#task-form');
+  if (form) { form.reset(); renderTaskCreateCustomFields(); }
+});
+
 /* ===== TASK DETAIL: Custom Fields Rendering ===== */
 
 function renderTaskCustomFields(customFieldDefs, taskCustomFields) {
@@ -2785,7 +2896,10 @@ renderTaskDetail = function(data) {
   _origRenderTaskDetail(data);
   if (data.customFieldDefs) {
     renderTaskCustomFields(data.customFieldDefs, data.task.custom_fields);
+    renderTaskCustomFieldsView(data.customFieldDefs, data.task.custom_fields);
   }
+  const editCard = $('#td-edit-card');
+  if (editCard) editCard.hidden = true;
 };
 
 /* ===== HOOK INTO TASK EDIT FORM SUBMIT TO SEND CUSTOM FIELDS ===== */
@@ -2819,6 +2933,7 @@ const _origLoadProject = loadProject;
 loadProject = async function(id) {
   await _origLoadProject(id);
   try { await loadProjectCustomFields(id); } catch (e) { console.error('loadProjectCustomFields:', e.message); }
+  try { renderTaskCreateCustomFields(); } catch (e) { console.error('renderTaskCreateCustomFields:', e.message); }
 };
 
 /* ===== INIT CUSTOM FIELD EVENTS ===== */

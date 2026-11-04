@@ -276,6 +276,14 @@ form {
   border-radius: 10px;
 }
 
+/* Formulare innerhalb von Karten (Task-Masken) ohne eigene Box */
+.card-content form {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: 0;
+}
+
 #auth-view form {
   background: transparent;
   border: none;
