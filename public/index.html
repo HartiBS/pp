@@ -41,6 +41,7 @@
             <button id="admin-users-btn" class="admin-dropdown-item" type="button">👥 Benutzerverwaltung</button>
             <button id="admin-projects-btn" class="admin-dropdown-item" type="button">📁 Projektverwaltung</button>
             <button id="admin-mapping-btn" class="admin-dropdown-item" type="button">🔗 Tracker-Mapping</button>
+            <button id="admin-custom-fields-btn" class="admin-dropdown-item" type="button">⚙ Custom Fields</button>
           </div>
         </div>
         <button id="logout-btn">Abmelden</button>
@@ -120,6 +121,7 @@
         <button id="admin-tab-users-btn" class="view-tab active" type="button">👥 Benutzerverwaltung</button>
         <button id="admin-tab-projects-btn" class="view-tab" type="button">📁 Projektverwaltung</button>
         <button id="admin-tab-mapping-btn" class="view-tab" type="button">🔗 Tracker-Mapping</button>
+        <button id="admin-tab-custom-fields-btn" class="view-tab" type="button">⚙ Custom Fields</button>
       </div>
       <div id="admin-tab-users">
       <div class="dashboard-header">
@@ -165,8 +167,10 @@
         <tbody></tbody>
       </table>
 
-      <h2 style="margin-top:2rem;">Custom Fields (Zusatzfelder)</h2>
-      <p style="color:var(--text-muted); font-size:0.875rem;">Definiere globale Zusatzfelder, die Projektmanager pro Projekt aktivieren können.</p>
+      </div><!-- /admin-tab-users -->
+      <div id="admin-tab-custom-fields" hidden>
+      <h2>Custom Fields (Zusatzfelder)</h2>
+      <p style="color:var(--text-muted); font-size:0.875rem;">Definiere globale Zusatzfelder, die pro Projekt aktiviert werden können. Sobald ein Feld einem Projekt zugewiesen ist, kann es nicht mehr gelöscht werden.</p>
       <form id="custom-field-form">
         <input type="hidden" name="id">
         <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
@@ -198,7 +202,8 @@
         <tbody></tbody>
       </table>
 
-      </div><!-- /admin-tab-users -->
+      </div><!-- /admin-tab-custom-fields -->
+
       <div id="admin-tab-projects" hidden>
       <h2>Projektverwaltung</h2>
       <p style="color:var(--text-muted); font-size:0.875rem;">Alle Projekte bearbeiten und löschen.</p>
@@ -208,6 +213,19 @@
         </thead>
         <tbody></tbody>
       </table>
+      <h3 style="margin-top:2rem;">Custom Fields pro Projekt (Matrix)</h3>
+      <p style="color:var(--text-muted); font-size:0.875rem;">Projekte nach unten, Felder nach rechts. Haken = Feld ist im Projekt aktiv.</p>
+      <div style="overflow-x:auto;">
+        <table id="admin-cf-matrix" class="matrix-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div style="display:flex; gap:0.75rem; margin-top:0.75rem;">
+        <button type="button" id="admin-cf-matrix-save-btn">Matrix speichern</button>
+      </div>
+      <p id="admin-cf-matrix-msg" style="margin-top:0.5rem; min-height:1.2em;"></p>
+
       <form id="admin-project-form" hidden style="margin-top:1rem; padding:1rem; background:var(--bg-card); border:1px solid var(--border); border-radius:8px;">
         <input type="hidden" name="id">
         <h3>Projekt bearbeiten</h3>
@@ -591,6 +609,7 @@
         <label>Bearbeiter
           <select name="assignee_id" id="gi-edit-assignee-select"></select>
         </label>
+        <div id="gi-edit-custom-fields" style="display:flex; flex-direction:column; gap:0.5rem;"></div>
         <div style="display:flex; gap:0.75rem;">
           <button type="submit">Im Tracker speichern</button>
           <button type="button" id="gi-edit-cancel-btn" class="btn-secondary">Abbrechen</button>

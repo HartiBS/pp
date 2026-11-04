@@ -2,6 +2,7 @@ const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { loadProjectRole, requireProjectPermission } = require('../utils/permissions');
 const github = require('../utils/github');
+const issueTracker = require('../utils/issueTracker');
 const db = require('../config/database');
 
 const router = express.Router();
@@ -185,7 +186,10 @@ router.post('/projects/:id/issues', loadProjectRole, requireProjectPermission('c
 });
 
 router.put('/projects/:id/issues/:number', loadProjectRole, requireProjectPermission('edit_task'), async (req, res) => {
-  const { title, description, state_event, labels, assignees, auto_sync } = req.body;
+  const { title, description, state_event, labels, assignees, auto_sync, custom_fields } = req.body;
+  if (custom_fields !== undefined && (typeof custom_fields !== 'object' || custom_fields === null || Array.isArray(custom_fields))) {
+    return res.status(400).json({ error: 'custom_fields muss ein Objekt sein' });
+  }
   if (labels !== undefined && !Array.isArray(labels)) {
     return res.status(400).json({ error: 'labels muss ein Array sein' });
   }
@@ -222,16 +226,25 @@ router.put('/projects/:id/issues/:number', loadProjectRole, requireProjectPermis
       }
     }
     const old = existing.rows[0];
+    // Custom Fields: Werte in den Markdown-Body (GitHub body) einbetten
+    let effectiveDescription = description;
+    if (custom_fields !== undefined) {
+      const cfResult = await issueTracker.applyCustomFieldsToIssue(req.params.id, existing.rows[0], custom_fields);
+      if (!cfResult.ok) {
+        return res.status(400).json({ error: cfResult.error });
+      }
+      effectiveDescription = cfResult.description;
+    }
     let updated;
     if (pushToTracker) {
       updated = await github.updateGitHubIssue(rows[0].github_repo, Number(req.params.number), {
-        title, description, state_event, labels, assignees,
+        title, description: effectiveDescription !== undefined ? effectiveDescription : description, state_event, labels, assignees,
       });
     } else {
       updated = {
         gitlab_iid: Number(req.params.number),
         title: title !== undefined ? title : old.title,
-        description: description !== undefined ? description : old.description,
+        description: effectiveDescription !== undefined ? effectiveDescription : old.description,
         state: state_event === 'close' ? 'closed' : state_event === 'reopen' ? 'opened' : old.state,
         web_url: null,
       };

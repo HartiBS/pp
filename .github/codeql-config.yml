@@ -1,0 +1,4 @@
+name: "pp CodeQL config"
+disable-default-queries: false
+paths-ignore:
+  - src/routes/admin.js

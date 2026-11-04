@@ -328,8 +328,12 @@ async function applyPullToTask(projectId, trackerType, issueRow) {
     if (ms.length > 0) milestoneId = ms[0].id;
   }
 
-  // Beschreibung: pp-meta aus der rohen Beschreibung entfernen + ungemappte Felder als Markdown
-  const parsed = taskMarkdown.markdownToTaskFields(fields.rawDescription || raw.description || '');
+  // Beschreibung: pp-meta aus der rohen Beschreibung entfernen + ungemappte Felder als Markdown.
+  // Aus der menschenlesbaren Markdown-Tabelle ("## Zusatzfelder", z. B. bei GitHub im Issue-Body)
+  // werden die Custom-Field-Werte dynamisch zurückgelesen.
+  const parsed = taskMarkdown.markdownToTaskFields(fields.rawDescription || raw.description || '', {
+    customFieldDefs: cfDefs,
+  });
   let description = parsed.description || null;
   if (unmappedMarkdown) {
     description = (description ? description + '\n' : '') + unmappedMarkdown;
@@ -342,12 +346,15 @@ async function applyPullToTask(projectId, trackerType, issueRow) {
     else if (issueRow.state === 'opened' && parsed.meta && parsed.meta.status === 'done') newStatus = 'in_progress';
   }
 
-  // Custom Fields mit bestehenden mergen
+  // Custom Fields mit bestehenden mergen: Werte aus Label-Mapping (fields.custom_fields)
+  // und dynamisch aus dem Markdown-Body des externen Issues (parsed.customFields)
+  const metaCf = (parsed.meta && parsed.meta.custom_fields) || {};
+  const pulledCustomFields = { ...metaCf, ...(parsed.customFields || {}), ...(fields.custom_fields || {}) };
   let customFieldsValue = null;
-  if (fields.custom_fields && Object.keys(fields.custom_fields).length > 0) {
+  if (Object.keys(pulledCustomFields).length > 0) {
     const { rows: t } = await db.query('SELECT custom_fields FROM tasks WHERE id = $1', [taskId]);
     const existing = (t[0] && t[0].custom_fields) || {};
-    customFieldsValue = { ...existing, ...fields.custom_fields };
+    customFieldsValue = { ...existing, ...pulledCustomFields };
   }
 
   await db.query(
@@ -388,6 +395,45 @@ async function applyPullToTask(projectId, trackerType, issueRow) {
   }
 }
 
+/**
+ * Wendet neue Custom-Field-Werte auf ein externes Issue an (Bearbeiten im Issue):
+ * validiert die Werte gegen die aktiven Projekt-Definitionen, bettet sie in den
+ * Markdown-Body (description/body) ein und aktualisiert den verknüpfuten lokalen Task.
+ * @returns {{ ok, error?, description? }} description = neuer Markdown-Body zum Push
+ */
+async function applyCustomFieldsToIssue(projectId, issueRow, customFieldsInput) {
+  const cfDefs = await customFields.getProjectFieldDefinitions(projectId);
+  const cleaned = {};
+  for (const def of cfDefs) {
+    const key = String(def.id);
+    const value = customFieldsInput ? customFieldsInput[key] : undefined;
+    const result = customFields.validateFieldValue(def, value);
+    if (!result.ok) return { ok: false, error: result.error };
+    if (value !== null && value !== undefined && value !== '') cleaned[key] = value;
+  }
+  const raw = issueRow.raw_data && typeof issueRow.raw_data === 'object'
+    ? issueRow.raw_data
+    : null;
+  const rawBody = raw
+    ? (raw.body !== undefined ? raw.body : (raw.description || ''))
+    : (issueRow.description || '');
+  const newDescription = taskMarkdown.mergeCustomFieldsIntoMarkdown(rawBody, cfDefs, cleaned);
+
+  // Verknüpfuten lokalen Task mitaktualisieren
+  const taskResult = await db.query(
+    'SELECT id, custom_fields FROM tasks WHERE gitlab_iid = $1 AND project_id = $2',
+    [issueRow.gitlab_iid, projectId]
+  );
+  if (taskResult.rows.length > 0) {
+    const existing = taskResult.rows[0].custom_fields || {};
+    await db.query(
+      'UPDATE tasks SET custom_fields = $1, updated_at = NOW() WHERE id = $2',
+      [{ ...existing, ...cleaned }, taskResult.rows[0].id]
+    );
+  }
+  return { ok: true, description: newDescription, cleaned };
+}
+
 module.exports = {
   getProjectTracker,
   getEffectiveSettings,
@@ -406,4 +452,5 @@ module.exports = {
   getProjectTrackerSettings,
   applyPullToTask,
   buildPushPayload,
+  applyCustomFieldsToIssue,
 };

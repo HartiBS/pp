@@ -13,5 +13,7 @@ jobs:
         with: { node-version: 20 }
       - run: npm ci
       - uses: github/codeql-action/init@v3
-        with: { languages: javascript }
+        with:
+          languages: javascript
+          config-file: ./.github/codeql-config.yml
       - uses: github/codeql-action/analyze@v3

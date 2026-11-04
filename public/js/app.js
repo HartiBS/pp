@@ -892,11 +892,12 @@ function renderGitLabIssueMeta(fields, raw) {
     cfBox.innerHTML = '<small style="color:var(--text-muted);">Keine Zusatzfelder für dieses Projekt aktiviert</small>';
   }
   for (const def of customFields) {
-    const value = giCustomValue(def, raw, def.is_mapped ? 'labels' : null);
+    // Wert kommt dynamisch vom Server (aus Markdown-Body/pp-meta/Label), sonst Fallback lokal
+    const value = def.value !== undefined && def.value !== null ? def.value : giCustomValue(def, raw, def.is_mapped ? 'labels' : null);
     const wrap = document.createElement('div');
     wrap.className = 'field';
     const label = document.createElement('label');
-    label.textContent = def.label + (def.is_mapped ? '' : ' (nicht gemappt)');
+    label.textContent = def.label + (def.is_required ? ' *' : '');
     const val = document.createElement('span');
     val.style.fontSize = '0.875rem';
     val.textContent = giFormatCustomValue(def, value);
@@ -981,6 +982,90 @@ function renderGiEditAssignees() {
   }
 }
 
+function renderGiEditCustomFields() {
+  const box = $('#gi-edit-custom-fields');
+  if (!box) return;
+  box.innerHTML = '';
+  const defs = (state.currentGitLabIssueFields || []).filter(f => f.kind === 'custom_field');
+  if (!defs.length) {
+    box.innerHTML = '<small style="color:var(--text-muted);">Keine Zusatzfelder für dieses Projekt aktiviert.</small>';
+    return;
+  }
+  for (const def of defs) {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const label = document.createElement('label');
+    label.textContent = def.label + (def.is_required ? ' *' : '');
+    wrap.appendChild(label);
+    const input = document.createElement('div');
+    let el;
+    const current = def.value !== undefined && def.value !== null ? def.value : null;
+    switch (def.field_type) {
+      case 'number':
+        el = document.createElement('input');
+        el.type = 'number'; el.step = 'any'; el.id = `gi-cf-${def.pp_field}`;
+        if (current !== null) el.value = current;
+        break;
+      case 'date':
+        el = document.createElement('input');
+        el.type = 'date'; el.id = `gi-cf-${def.pp_field}`;
+        if (current) el.value = current;
+        break;
+      case 'checkbox':
+        el = document.createElement('input');
+        el.type = 'checkbox'; el.id = `gi-cf-${def.pp_field}`;
+        if (current === true) el.checked = true;
+        break;
+      case 'dropdown': {
+        el = document.createElement('select');
+        el.id = `gi-cf-${def.pp_field}`;
+        const empty = document.createElement('option');
+        empty.value = ''; empty.textContent = '—';
+        el.appendChild(empty);
+        for (const o of (def.options || [])) {
+          const opt = document.createElement('option');
+          opt.value = o; opt.textContent = o;
+          if (o === current) opt.selected = true;
+          el.appendChild(opt);
+        }
+        break;
+      }
+      default:
+        el = document.createElement('input');
+        el.type = 'text'; el.id = `gi-cf-${def.pp_field}`;
+        if (current !== null) el.value = current;
+    }
+    el.dataset.fieldId = def.pp_field.split(':')[1];
+    el.dataset.fieldType = def.field_type;
+    input.appendChild(el);
+    wrap.appendChild(input);
+    box.appendChild(wrap);
+  }
+}
+
+function collectGiEditCustomFields() {
+  const result = {};
+  const box = $('#gi-edit-custom-fields');
+  if (!box) return result;
+  for (const el of box.querySelectorAll('[id^="gi-cf-"]')) {
+    const id = el.dataset.fieldId;
+    switch (el.dataset.fieldType) {
+      case 'number':
+        result[id] = el.value === '' ? null : Number(el.value);
+        break;
+      case 'checkbox':
+        result[id] = el.checked;
+        break;
+      case 'dropdown':
+      case 'date':
+      case 'text':
+      default:
+        result[id] = el.value || null;
+    }
+  }
+  return result;
+}
+
 async function loadGitLabIssue(issue) {
   state.currentGitLabIssue = issue;
   // Live-Pull: aktuellen Stand vom Tracker holen (fällt serverseitig auf lokalen Stand zurück)
@@ -1012,6 +1097,7 @@ async function loadGitLabIssue(issue) {
   try {
     const { fields, raw } = await api(`/api/gitlab/projects/${state.currentProject.id}/issues/${issue.gitlab_iid}/fields`);
     state.currentGitLabIssueRaw = raw;
+    state.currentGitLabIssueFields = fields || [];
     renderGitLabIssueMeta(fields, raw);
   } catch (err) {
     state.currentGitLabIssueRaw = null;
@@ -1084,7 +1170,7 @@ async function loadAdmin(defaultTab) {
   // #71: Load custom field definitions
   await loadCustomFieldDefinitions();
   // #89/#90: Tab auswählen
-  const tab = defaultTab === 'projects' ? 'projects' : defaultTab === 'mapping' ? 'mapping' : 'users';
+  const tab = ['projects', 'mapping', 'custom-fields'].includes(defaultTab) ? defaultTab : 'users';
   switchAdminTab(tab);
   if (tab === 'projects') await loadAdminProjects();
   show('admin-view');
@@ -1365,25 +1451,36 @@ bind('#admin-mapping-btn', () => {
   if (dd) dd.hidden = true;
   loadAdmin('mapping');
 });
+bind('#admin-custom-fields-btn', () => {
+  const dd = $('#admin-dropdown');
+  if (dd) dd.hidden = true;
+  loadAdmin('custom-fields');
+});
 bind('#admin-tab-users-btn', () => switchAdminTab('users'));
 bind('#admin-tab-projects-btn', () => switchAdminTab('projects'));
 bind('#admin-tab-mapping-btn', () => switchAdminTab('mapping'));
+bind('#admin-tab-custom-fields-btn', () => switchAdminTab('custom-fields'));
 
 function switchAdminTab(tab) {
   const usersBtn = $('#admin-tab-users-btn');
   const projectsBtn = $('#admin-tab-projects-btn');
   const mappingBtn = $('#admin-tab-mapping-btn');
+  const cfBtn = $('#admin-tab-custom-fields-btn');
   const usersDiv = $('#admin-tab-users');
   const projectsDiv = $('#admin-tab-projects');
   const mappingDiv = $('#admin-tab-mapping');
+  const cfDiv = $('#admin-tab-custom-fields');
   if (usersBtn) usersBtn.classList.toggle('active', tab === 'users');
   if (projectsBtn) projectsBtn.classList.toggle('active', tab === 'projects');
   if (mappingBtn) mappingBtn.classList.toggle('active', tab === 'mapping');
+  if (cfBtn) cfBtn.classList.toggle('active', tab === 'custom-fields');
   if (usersDiv) usersDiv.hidden = tab !== 'users';
   if (projectsDiv) projectsDiv.hidden = tab !== 'projects';
   if (mappingDiv) mappingDiv.hidden = tab !== 'mapping';
-  if (tab === 'projects') loadAdminProjects();
+  if (cfDiv) cfDiv.hidden = tab !== 'custom-fields';
+  if (tab === 'projects') { loadAdminProjects(); loadAdminCfMatrix(); }
   if (tab === 'mapping') loadTrackerMappings();
+  if (tab === 'custom-fields') loadCustomFieldDefinitions();
 }
 bind('#admin-back-btn', () => loadDashboard());
 
@@ -1553,6 +1650,7 @@ bind('#gi-edit-btn', () => {
   form.description.value = issue.description || '';
   renderGiEditLabelPills();
   renderGiEditAssignees();
+  renderGiEditCustomFields();
   form.hidden = false;
 });
 bind('#gi-edit-cancel-btn', () => { $('#gi-edit-form').hidden = true; });
@@ -1566,6 +1664,10 @@ document.addEventListener('submit', async (e) => {
       .map(p => p.dataset.label);
     const base = trackerType() === 'github' ? '/api/github' : '/api/gitlab';
     const body = { title: fd.get('title'), description: fd.get('description'), labels: selectedLabels };
+    const customFields = collectGiEditCustomFields();
+    if (Object.keys(customFields).length > 0 || state.currentGitLabIssueFields?.some(f => f.kind === 'custom_field')) {
+      body.custom_fields = customFields;
+    }
     if (trackerType() === 'github') {
       const assignee = fd.get('assignee_id');
       body.assignees = assignee ? [state.trackerUsers.find(u => String(u.id) === String(assignee))?.username].filter(Boolean) : [];
@@ -2245,14 +2347,17 @@ function renderCustomFieldTable(definitions) {
   for (const def of definitions) {
     const tr = document.createElement('tr');
     const optionsText = def.field_type === 'dropdown' ? (def.options || []).join(', ') : '—';
+    const delBtn = def.is_assigned
+      ? `<button class="btn-small btn-secondary" disabled title="Feld ist einem Projekt zugewiesen und kann nicht gelöscht werden">🔒</button>`
+      : `<button class="btn-small btn-secondary" onclick="deleteCustomField(${def.id})" title="Löschen">🗑</button>`;
     tr.innerHTML = `
-      <td>${escapeHtml(def.name)}</td>
+      <td>${escapeHtml(def.name)}${def.is_assigned ? ' <small style="color:var(--text-muted);">(zugewiesen)</small>' : ''}</td>
       <td><span class="badge badge-todo">${CF_TYPE_LABELS[def.field_type] || def.field_type}</span></td>
       <td><small>${escapeHtml(optionsText)}</small></td>
       <td>${def.is_required ? '✅ Ja' : '—'}</td>
       <td>
         <button class="btn-small btn-secondary" onclick="editCustomField(${def.id})">✏️</button>
-        <button class="btn-small btn-secondary" onclick="deleteCustomField(${def.id})">🗑</button>
+        ${delBtn}
       </td>
     `;
     tbody.appendChild(tr);
@@ -2331,7 +2436,7 @@ window.editCustomField = async function(id) {
 };
 
 window.deleteCustomField = async function(id) {
-  if (!confirm('Custom Field wirklich löschen? Dies entfernt das Feld aus allen Projekten.')) return;
+  if (!confirm('Custom Field wirklich löschen?')) return;
   try {
     await api(`/api/admin/custom-fields/${id}`, { method: 'DELETE' });
     await loadCustomFieldDefinitions();
@@ -2498,6 +2603,64 @@ function addMappingRow(type) {
   MAPPING_STATE[type].push({ pp_field: ppField, tracker_field: trackerField, direction });
   renderMappingTable(type);
 }
+
+/* ===== ADMIN: Custom-Fields-Matrix (Projekte x Felder) ===== */
+
+async function loadAdminCfMatrix() {
+  const table = $('#admin-cf-matrix');
+  if (!table) return;
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  thead.innerHTML = '<tr><th>Laden...</th></tr>';
+  tbody.innerHTML = '';
+  try {
+    const data = await api('/api/admin/custom-fields/matrix');
+    const { projects, definitions, matrix } = data;
+    const enabled = new Map((matrix || []).map(m => [`${m.project_id}:${m.field_definition_id}`, m.is_enabled]));
+    thead.innerHTML = '<tr><th>Projekt</th>' + definitions.map(d =>
+      `<th title="${escapeHtml(d.name)} (${CF_TYPE_LABELS[d.field_type] || d.field_type})">${escapeHtml(d.name)}</th>`).join('') + '</tr>';
+    tbody.innerHTML = '';
+    if (!projects.length) {
+      tbody.innerHTML = `<tr><td colspan="${definitions.length + 1}"><small style="color:var(--text-muted);">Keine Projekte vorhanden.</small></td></tr>`;
+      return;
+    }
+    if (!definitions.length) {
+      tbody.innerHTML = '<tr><td><small style="color:var(--text-muted);">Noch keine Custom Fields definiert – zuerst im Tab „Custom Fields" anlegen.</small></td></tr>';
+      return;
+    }
+    for (const proj of projects) {
+      const tr = document.createElement('tr');
+      let row = `<td>${escapeHtml(proj.name)}</td>`;
+      for (const def of definitions) {
+        const key = `${proj.id}:${def.id}`;
+        const checked = enabled.get(key) ? 'checked' : '';
+        row += `<td><input type="checkbox" data-project-id="${proj.id}" data-field-id="${def.id}" ${checked}></td>`;
+      }
+      tr.innerHTML = row;
+      tbody.appendChild(tr);
+    }
+  } catch (err) {
+    thead.innerHTML = '';
+    tbody.innerHTML = `<tr><td><small class="error">Matrix konnte nicht geladen werden: ${escapeHtml(err.message)}</small></td></tr>`;
+  }
+}
+
+bind('#admin-cf-matrix-save-btn', async () => {
+  const msg = $('#admin-cf-matrix-msg');
+  const boxes = document.querySelectorAll('#admin-cf-matrix input[type="checkbox"]');
+  const matrix = Array.from(boxes).map(cb => ({
+    project_id: Number(cb.dataset.projectId),
+    field_definition_id: Number(cb.dataset.fieldId),
+    is_enabled: cb.checked,
+  }));
+  try {
+    await api('/api/admin/custom-fields/matrix', { method: 'PUT', body: { matrix } });
+    if (msg) { msg.textContent = '✅ Matrix gespeichert'; setTimeout(() => { msg.textContent = ''; }, 2500); }
+  } catch (err) {
+    if (msg) msg.textContent = '❌ ' + err.message;
+    alert(err.message);
+  }
+});
 
 /* ===== PROJECT: Custom Fields Aktivierung ===== */
 

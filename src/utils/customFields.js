@@ -104,14 +104,47 @@ async function updateDefinition(id, { name, field_type, options, is_required }) 
 }
 
 /**
- * Löscht eine Custom-Field-Definition (CASCADE löscht auch project_custom_fields).
+ * Prüft, ob eine Custom-Field-Definition einem Projekt zugewiesen ist.
+ * Sobald das Feld einem Projekt zugewiesen wurde, darf es nicht mehr gelöscht werden.
+ */
+async function isAssignedToProject(id) {
+  const { rows } = await db.query(
+    'SELECT 1 FROM project_custom_fields WHERE field_definition_id = $1 LIMIT 1',
+    [id]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Löscht eine Custom-Field-Definition nur, wenn sie keinem Projekt zugewiesen ist.
+ * Rückgabe: { ok, error?, deleted? }
  */
 async function deleteDefinition(id) {
+  if (await isAssignedToProject(id)) {
+    return { ok: false, error: 'Feld ist einem Projekt zugewiesen und kann nicht gelöscht werden' };
+  }
   const { rowCount } = await db.query(
     'DELETE FROM custom_field_definitions WHERE id = $1',
     [id]
   );
-  return rowCount > 0;
+  return rowCount > 0 ? { ok: true, deleted: true } : { ok: true, deleted: false };
+}
+
+/**
+ * Liefert alle Definitionen inkl. Information, ob sie bereits einem Projekt
+ * zugewiesen sind (für den Löschschutz in der Admin-Ansicht).
+ */
+async function getAllDefinitionsWithUsage() {
+  const { rows } = await db.query(
+    `SELECT cfd.*,
+            EXISTS (
+              SELECT 1 FROM project_custom_fields pcf
+              WHERE pcf.field_definition_id = cfd.id
+            ) AS is_assigned
+     FROM custom_field_definitions cfd
+     ORDER BY cfd.id ASC`
+  );
+  return rows;
 }
 
 /**
@@ -216,6 +249,8 @@ module.exports = {
   validateFieldDefinition,
   validateFieldValue,
   getAllDefinitions,
+  getAllDefinitionsWithUsage,
+  isAssignedToProject,
   createDefinition,
   updateDefinition,
   deleteDefinition,
