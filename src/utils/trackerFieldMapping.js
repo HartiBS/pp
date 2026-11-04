@@ -407,6 +407,18 @@ function applyPullMapping(trackerType, raw, mappings, { customFieldDefs = [] } =
     }
   }
 
+  // Nicht gemappte Standard-Felder des Trackers wandern beim Pull direkt in die
+  // entsprechenden lokalen Felder (statt als Markdown in die Beschreibung).
+  const has = (tf) => mappedTrackerFields.has(tf);
+  const setIfUnset = (pp, val) => { if (fields[pp] === undefined && val !== undefined && val !== null) fields[pp] = val; };
+  if (!has('title') && raw.title) setIfUnset('title', raw.title);
+  if (!has('state') && raw.state) setIfUnset('status', raw.state === 'closed' ? 'done' : null);
+  if (!has('labels') && labelList.length > 0) setIfUnset('labels', labelList);
+  if (!has('due_date') && raw.due_date) setIfUnset('due_date', raw.due_date);
+  if (!has('milestone') && raw.milestone && raw.milestone.id != null) setIfUnset('milestone_external_id', raw.milestone.id);
+  if (!has('time_estimate') && raw.time_estimate != null) setIfUnset('estimated_hours', Number(raw.time_estimate) / 3600);
+  if (!has('time_spent') && raw.time_spent != null) setIfUnset('spent_hours', Number(raw.time_spent) / 3600);
+
   if (Object.keys(customFields).length > 0) fields.custom_fields = customFields;
   const unmapped = collectUnmapped(raw, mappedTrackerFields, trackerType);
   return { fields, unmappedMarkdown: unmappedToMarkdown(unmapped, trackerType) };

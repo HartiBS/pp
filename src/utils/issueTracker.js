@@ -285,7 +285,8 @@ async function buildPushPayload(project, task, { customFieldDefs = [], subtasks 
 /**
  * Wendet das konfigurierte Tracker-Feld-Mapping auf ein externes Issue an
  * (Pull-Richtung) und aktualisiert den lokalen Task.
- * Nicht gemappte externe Felder landen als Markdown-Tabelle in der Beschreibung.
+ * Nicht gemappte Felder wandern in die lokalen Task-Felder; die Beschreibung
+ * enthaelt nur noch den reinen Body-Inhalt.
  */
 async function applyPullToTask(projectId, trackerType, issueRow) {
   const taskResult = await db.query(
@@ -310,10 +311,8 @@ async function applyPullToTask(projectId, trackerType, issueRow) {
   const rawUser = trackerType === 'github'
     ? ((raw.assignee && raw.assignee.login) || (Array.isArray(raw.assignees) && raw.assignees[0] && raw.assignees[0].login))
     : ((raw.assignee && raw.assignee.username) || raw.assignee_username);
-  const wantsAssignee = mappings.some(m =>
-    (m.direction === 'pull' || m.direction === 'both') && m.pp_field === 'assignee' &&
-    ['assignee_username', 'assignees'].includes(m.tracker_field));
-  if (wantsAssignee && rawUser) {
+  // Bearbeiter wandert unabhaengig vom Mapping in das lokale Feld
+  if (rawUser) {
     const { rows: u } = await db.query('SELECT id FROM users WHERE username = $1 LIMIT 1', [rawUser]);
     if (u.length > 0) assigneeId = u[0].id;
   }
@@ -328,28 +327,40 @@ async function applyPullToTask(projectId, trackerType, issueRow) {
     if (ms.length > 0) milestoneId = ms[0].id;
   }
 
-  // Beschreibung: pp-meta aus der rohen Beschreibung entfernen + ungemappte Felder als Markdown.
-  // Aus der menschenlesbaren Markdown-Tabelle ("## Zusatzfelder", z. B. bei GitHub im Issue-Body)
-  // werden die Custom-Field-Werte dynamisch zurückgelesen.
-  const parsed = taskMarkdown.markdownToTaskFields(fields.rawDescription || raw.description || '', {
-    customFieldDefs: cfDefs,
-  });
-  let description = parsed.description || null;
-  if (unmappedMarkdown) {
-    description = (description ? description + '\n' : '') + unmappedMarkdown;
-  }
+  // Body-Inhalt: pp-meta + ##-Abschnitte der nicht gemappten Felder parsen.
+  // Lokal landet nur der reine Inhalt in der Beschreibung; die Werte der
+  // nicht gemappten Felder wandern zurueck in die lokalen Task-Felder.
+  const rawDescription = fields.rawDescription || raw.description || '';
+  const parsed = taskMarkdown.markdownToTaskFields(rawDescription, { customFieldDefs: cfDefs });
+  const sections = taskMarkdown.parseFieldSections(rawDescription, { customFieldDefs: cfDefs });
+  let description = sections.description || null;
+  void unmappedMarkdown; // nicht gemappte externe Felder landen nicht mehr im lokalen Text
 
-  // Status: gemappt ('closed' → done) oder Fallback über Issue-State
-  let newStatus = fields.status || null;
+
+  // Status: Mapping > Body-Abschnitt > Fallback über Issue-State
+  let newStatus = fields.status || sections.fields.status || null;
   if (!newStatus) {
     if (issueRow.state === 'closed' && parsed.meta && parsed.meta.status !== 'done') newStatus = 'done';
     else if (issueRow.state === 'opened' && parsed.meta && parsed.meta.status === 'done') newStatus = 'in_progress';
   }
 
-  // Custom Fields mit bestehenden mergen: Werte aus Label-Mapping (fields.custom_fields)
-  // und dynamisch aus dem Markdown-Body des externen Issues (parsed.customFields)
+  // Weitere Felder: Mapping hat Vorrang, sonst Wert aus dem Body-Abschnitt
+  const bodyPriority = sections.fields.priority || null;
+  const bodyIssueType = sections.fields.issue_type || null;
+  const bodyLabels = Array.isArray(sections.fields.labels) ? sections.fields.labels : null;
+  const bodyDueDate = sections.fields.due_date || null;
+  const bodyEst = sections.fields.estimated_hours != null ? sections.fields.estimated_hours : null;
+  const bodySpent = sections.fields.spent_hours != null ? sections.fields.spent_hours : null;
+
+    // Custom Fields mit bestehenden mergen: Werte aus Label-Mapping, pp-meta,
+  // Markdown-Body (parsed.customFields) und ##-Abschnitten (sections.fields)
   const metaCf = (parsed.meta && parsed.meta.custom_fields) || {};
-  const pulledCustomFields = { ...metaCf, ...(parsed.customFields || {}), ...(fields.custom_fields || {}) };
+  const pulledCustomFields = {
+    ...metaCf,
+    ...(parsed.customFields || {}),
+    ...(fields.custom_fields || {}),
+    ...(sections.fields.custom_fields || {}),
+  };
   let customFieldsValue = null;
   if (Object.keys(pulledCustomFields).length > 0) {
     const { rows: t } = await db.query('SELECT custom_fields FROM tasks WHERE id = $1', [taskId]);
@@ -377,12 +388,12 @@ async function applyPullToTask(projectId, trackerType, issueRow) {
       fields.title || null,
       description,
       newStatus,
-      fields.priority || null,
-      fields.issue_type || null,
-      Array.isArray(fields.labels) ? fields.labels : null,
-      fields.due_date || null,
-      fields.estimated_hours != null ? fields.estimated_hours : null,
-      fields.spent_hours != null ? fields.spent_hours : null,
+      fields.priority || bodyPriority,
+      fields.issue_type || bodyIssueType,
+      Array.isArray(fields.labels) ? fields.labels : bodyLabels,
+      fields.due_date || bodyDueDate,
+      fields.estimated_hours != null ? fields.estimated_hours : bodyEst,
+      fields.spent_hours != null ? fields.spent_hours : bodySpent,
       assigneeId,
       milestoneId,
       customFieldsValue,

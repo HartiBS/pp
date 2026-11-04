@@ -192,6 +192,120 @@ function taskToMarkdown(task, { customFieldDefs = [], subtasks = [], parent = nu
  *   anhand der Definitionen (Name + Typ) zurück in custom_fields übernommen.
  * @returns {{ meta: object|null, description: string, customFields: object }}
  */
+// Bekannte ##-Abschnitte (die beim Push erzeugt werden) -> Task-Feld
+const FIELD_SECTION_TITLES = {
+  'Typ': 'issue_type',
+  'Status': 'status',
+  'Priorität': 'priority',
+  'Fälligkeitsdatum': 'due_date',
+  'Zeiterfassung': 'hours',
+  'Labels': 'labels',
+};
+
+function reverseLookup(labels, raw) {
+  if (raw === null || raw === undefined) return null;
+  const v = String(raw).trim();
+  for (const [key, label] of Object.entries(labels)) {
+    if (label === v || key === v) return key;
+  }
+  return null;
+}
+
+/**
+ * Parst die beim Push erzeugten ##-Abschnitte eines Issue-Body zurueck in
+ * Task-Felder. Die Beschreibung enthaelt danach nur noch den reinen Inhalt
+ * (Freitext + ## Beschreibung) - ohne die Abschnitte der nicht gemappten
+ * Felder, ohne pp-meta und ohne Zusatzdaten-Bloecke.
+ *
+ * @param {string} markdown - Roher Body des externen Issues
+ * @param {object} opts
+ * @param {Array}  opts.customFieldDefs - Custom-Field-Definitionen (Name -> id)
+ * @returns {{ description: string, fields: object }}
+ */
+function parseFieldSections(markdown, { customFieldDefs = [] } = {}) {
+  const fields = {};
+  const custom = {};
+  if (!markdown || typeof markdown !== 'string') {
+    return { description: '', fields };
+  }
+  // pp-meta-Block entfernen
+  let md = markdown;
+  const startIdx = md.indexOf(META_START);
+  if (startIdx !== -1) {
+    const endIdx = md.indexOf(META_END, startIdx);
+    if (endIdx !== -1) {
+      let removeEnd = endIdx + META_END.length;
+      while (removeEnd < md.length && md[removeEnd] === '\n') removeEnd++;
+      md = md.slice(0, startIdx) + md.slice(removeEnd);
+    }
+  }
+  const parts = md.split(/^## /m);
+  const descParts = [];
+  const head = (parts.shift() || '').trim();
+  if (head) descParts.push(head);
+  for (const part of parts) {
+    const nl = part.indexOf('\n');
+    const title = (nl === -1 ? part : part.slice(0, nl)).trim();
+    const content = (nl === -1 ? '' : part.slice(nl + 1)).trim();
+    if (title === 'Beschreibung') {
+      if (content) descParts.push(content);
+      continue;
+    }
+    // Nicht gemappte externe Felder / Checkliste / Verknuepfungen bleiben nicht im lokalen Inhalt
+    if (title.startsWith('Zusatzdaten aus ') || title === 'Checkliste' || title === 'Verknüpfte Tasks') {
+      continue;
+    }
+    const key = FIELD_SECTION_TITLES[title];
+    if (key === 'issue_type') {
+      const v = reverseLookup(TYPE_LABELS, content);
+      if (v) fields.issue_type = v;
+      continue;
+    }
+    if (key === 'status') {
+      const v = reverseLookup(STATUS_LABELS, content);
+      if (v) fields.status = v;
+      continue;
+    }
+    if (key === 'priority') {
+      const v = reverseLookup(PRIORITY_LABELS, content);
+      if (v) fields.priority = v;
+      continue;
+    }
+    if (key === 'due_date') {
+      if (content) fields.due_date = content;
+      continue;
+    }
+    if (key === 'hours') {
+      const est = content.match(/Geschätzt:\s*([\d.,]+)\s*h/);
+      const spent = content.match(/Aufgewendet:\s*([\d.,]+)\s*h/);
+      if (est) fields.estimated_hours = Number(est[1].replace(',', '.'));
+      if (spent) fields.spent_hours = Number(spent[1].replace(',', '.'));
+      continue;
+    }
+    if (key === 'labels') {
+      const labels = [...content.matchAll(/`([^`]+)`/g)].map(m => m[1]);
+      if (labels.length) fields.labels = labels;
+      continue;
+    }
+    // Custom Field am Abschnitts-Titel (Name) erkennen
+    const def = customFieldDefs.find(d => d.name === title);
+    if (def && content) {
+      if (def.field_type === 'checkbox') custom[String(def.id)] = content.includes('✅');
+      else if (def.field_type === 'number') {
+        const n = Number(content.replace(',', '.'));
+        if (!isNaN(n)) custom[String(def.id)] = n;
+      } else {
+        custom[String(def.id)] = content;
+      }
+      continue;
+    }
+    // Unbekannter Abschnitt: als reinen Inhalt behalten
+    descParts.push(`## ${title}\n\n${content}`);
+  }
+  if (Object.keys(custom).length > 0) fields.custom_fields = custom;
+  return { description: descParts.join('\n\n').trim(), fields };
+}
+
 function markdownToTaskFields(markdown, { customFieldDefs = [] } = {}) {
   if (!markdown || typeof markdown !== 'string') {
     return { meta: null, description: '', customFields: {} };
@@ -351,6 +465,7 @@ function mergeCustomFieldsIntoMarkdown(markdown, customFieldDefs, values) {
 module.exports = {
   taskToMarkdown,
   markdownToTaskFields,
+  parseFieldSections,
   parseCustomFieldsSection,
   mergeCustomFieldsIntoMarkdown,
   escapeMd,
