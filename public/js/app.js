@@ -2364,7 +2364,36 @@ function renderCustomFieldTable(definitions) {
   }
 }
 
+function openCustomFieldMask(editDef = null) {
+  const form = $('#custom-field-form');
+  form.reset();
+  form.querySelector('input[name="id"]').value = editDef ? editDef.id : '';
+  if (editDef) {
+    form.querySelector('input[name="name"]').value = editDef.name;
+    $('#cf-type-select').value = editDef.field_type;
+    $('#cf-options-input').value = (editDef.options || []).join(', ');
+    form.querySelector('input[name="is_required"]').checked = !!editDef.is_required;
+  }
+  $('#cf-options-label').hidden = $('#cf-type-select').value !== 'dropdown';
+  $('#cf-options-input').required = $('#cf-type-select').value === 'dropdown';
+  $('#cf-mask-title').textContent = editDef ? 'Custom Field bearbeiten' : 'Custom Field anlegen';
+  $('#cf-save-btn').textContent = editDef ? 'Speichern' : '+ Hinzufügen';
+  $('#cf-msg').textContent = '';
+  $('#cf-mask').hidden = false;
+}
+
+function closeCustomFieldMask() {
+  $('#cf-mask').hidden = true;
+  $('#custom-field-form').reset();
+  $('#custom-field-form input[name="id"]').value = '';
+  $('#cf-options-label').hidden = true;
+}
+
 function bindCustomFieldAdminEvents() {
+  // cf-submit-btn oeffnet die Maske
+  bind('#cf-submit-btn', () => openCustomFieldMask(null));
+  // Klick auf den Masken-Hintergrund schliesst die Maske
+  bind('#cf-mask', (e) => { if (e.target.id === 'cf-mask') closeCustomFieldMask(); });
   // Type select changes -> show/hide options input
   bind('#cf-type-select', 'change', (e) => {
     const isDropdown = e.target.value === 'dropdown';
@@ -2394,27 +2423,16 @@ function bindCustomFieldAdminEvents() {
         } else {
           await api('/api/admin/custom-fields', { method: 'POST', body });
         }
-        e.target.reset();
-        $('#custom-field-form input[name="id"]').value = '';
-        $('#cf-submit-btn').textContent = '+ Hinzufügen';
-        $('#cf-cancel-btn').hidden = true;
-        $('#cf-msg').textContent = '✅ Gespeichert';
-        setTimeout(() => { $('#cf-msg').textContent = ''; }, 2000);
-        await loadCustomFieldDefinitions();
+        closeCustomFieldMask();
+        await loadCustomFieldDefinitions(); // -> custom-field-table aktualisieren
       } catch (err) {
         $('#cf-msg').textContent = '❌ ' + err.message;
       }
     }
   });
 
-  // Cancel edit
-  bind('#cf-cancel-btn', () => {
-    $('#custom-field-form').reset();
-    $('#custom-field-form input[name="id"]').value = '';
-    $('#cf-submit-btn').textContent = '+ Hinzufügen';
-    $('#cf-cancel-btn').hidden = true;
-    $('#cf-options-label').hidden = true;
-  });
+  // Cancel: Maske schliessen
+  bind('#cf-cancel-btn', () => closeCustomFieldMask());
 }
 
 /* Global functions for onclick handlers */
@@ -2423,15 +2441,7 @@ window.editCustomField = async function(id) {
     const { definitions } = await api('/api/admin/custom-fields');
     const def = definitions.find(d => d.id === id);
     if (!def) return;
-    $('#custom-field-form input[name="id"]').value = def.id;
-    $('#custom-field-form input[name="name"]').value = def.name;
-    $('#cf-type-select').value = def.field_type;
-    $('#cf-options-label').hidden = def.field_type !== 'dropdown';
-    $('#cf-options-input').value = (def.options || []).join(', ');
-    $('#cf-options-input').required = def.field_type === 'dropdown';
-    $('#custom-field-form input[name="is_required"]').checked = def.is_required;
-    $('#cf-submit-btn').textContent = 'Speichern';
-    $('#cf-cancel-btn').hidden = false;
+    openCustomFieldMask(def);
   } catch (err) { alert(err.message); }
 };
 
