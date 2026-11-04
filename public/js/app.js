@@ -1839,7 +1839,6 @@ function renderTaskDetail(data) {
 
   // Header
   $('#td-title').textContent = task.title;
-  $('#td-description').textContent = task.description || '';
   $('#td-type-badge').textContent = ISSUE_TYPE_LABELS[task.issue_type] || task.issue_type;
   $('#td-priority-badge').innerHTML = priorityBadge(task.priority || 'normal');
   $('#td-status-badge').className = `badge ${badgeClass(task.status)}`;
@@ -1865,6 +1864,7 @@ function renderTaskDetail(data) {
       state.currentProject.issue_tracker_type !== 'none' &&
       (state.currentProject.gitlab_project_id || state.currentProject.github_repo));
     tdAutoSyncLabel.hidden = !hasTracker;
+    tdAutoSyncLabel.dataset.noTracker = hasTracker ? '' : '1';
     const cb = tdAutoSyncLabel.querySelector('input[name="auto_sync"]');
     if (cb) {
       // Wurde der Sync einmal aktiviert, darf er nicht mehr ausgeschaltet werden
@@ -2123,6 +2123,7 @@ function bindTaskDetailEvents() {
         });
         $('#td-msg').textContent = '✅ Gespeichert';
         setTimeout(() => { $('#td-msg').textContent = ''; }, 2000);
+        setTaskEditMode(false);
         await loadTaskDetail(state.currentProject.id, state.currentTask.task.id);
         await loadProject(state.currentProject.id);
       } catch (err) { alert(err.message); }
@@ -2791,40 +2792,31 @@ function collectTaskCreateCustomFields() {
 
 /* ===== TASK DETAIL VIEW: Anzeige-Modus (Read-only) + Bearbeiten-Toggle ===== */
 
-function renderTaskCustomFieldsView(customFieldDefs, taskCustomFields) {
-  const block = $('#td-view-custom-fields-block');
-  const box = $('#td-view-custom-fields');
-  if (!block || !box) return;
-  if (!customFieldDefs || !customFieldDefs.length) {
-    block.hidden = true;
-    box.innerHTML = '';
-    return;
+/* Anzeige- und Bearbeitungsmodus teilen sich dieselbe Maske (td-edit-form):
+   im Anzeige-Modus sind alle Felder deaktiviert (nicht eingabebereit). */
+function setTaskEditMode(editing) {
+  const form = $('#td-edit-form');
+  if (form) {
+    for (const el of form.querySelectorAll('input, select, textarea')) {
+      el.disabled = !editing;
+    }
   }
-  block.hidden = false;
-  box.innerHTML = '';
-  const values = taskCustomFields || {};
-  for (const def of customFieldDefs) {
-    const value = values[String(def.id)];
-    const fieldDiv = document.createElement('div');
-    fieldDiv.className = 'field';
-    const label = document.createElement('label');
-    label.textContent = def.name;
-    const val = document.createElement('span');
-    val.style.fontSize = '0.875rem';
-    val.textContent = giFormatCustomValue(def, value !== undefined ? value : null);
-    fieldDiv.appendChild(label);
-    fieldDiv.appendChild(val);
-    box.appendChild(fieldDiv);
-  }
+  const saveBtn = $('#td-save-btn');
+  const cancelBtn = $('#td-edit-cancel-btn');
+  if (saveBtn) saveBtn.hidden = !editing;
+  if (cancelBtn) cancelBtn.hidden = !editing;
+  const toggleBtn = $('#td-edit-toggle-btn');
+  if (toggleBtn) toggleBtn.hidden = editing;
+  const autoSync = $('#td-auto-sync-label');
+  if (autoSync && !autoSync.dataset.keepHidden) autoSync.hidden = !editing && autoSync.hidden;
 }
 
 bind('#td-edit-toggle-btn', () => {
-  const card = $('#td-edit-card');
-  if (!card) return;
-  card.hidden = !card.hidden;
-  if (!card.hidden) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTaskEditMode(true);
+  const form = $('#td-edit-form');
+  if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
 });
-bind('#td-edit-cancel-btn', () => { $('#td-edit-card').hidden = true; });
+bind('#td-edit-cancel-btn', () => setTaskEditMode(false));
 
 bind('#task-form-toggle-btn', () => {
   const card = $('#task-form-card');
@@ -2917,10 +2909,8 @@ renderTaskDetail = function(data) {
   _origRenderTaskDetail(data);
   if (data.customFieldDefs) {
     renderTaskCustomFields(data.customFieldDefs, data.task.custom_fields);
-    renderTaskCustomFieldsView(data.customFieldDefs, data.task.custom_fields);
   }
-  const editCard = $('#td-edit-card');
-  if (editCard) editCard.hidden = true;
+  setTaskEditMode(false);
 };
 
 /* ===== HOOK INTO TASK EDIT FORM SUBMIT TO SEND CUSTOM FIELDS ===== */
